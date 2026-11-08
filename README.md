@@ -33,3 +33,7 @@ Ajouter un sujet = ajouter un objet dans `data/scenarios.js` (le schéma est doc
   la carte affiche l'instantané le plus proche antérieur à l'année choisie.
 - Textes et images : Wikipédia (CC BY-SA).
 - Fonds : © OpenStreetMap contributors, © CARTO ; imagerie © Esri.
+
+## Feuille de route
+
+Le plan détaillé du projet et les spécifications fonctionnelles sont dans [`docs/PLAN.md`](docs/PLAN.md).
