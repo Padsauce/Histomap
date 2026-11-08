@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Histomap</title>
+  <meta name="description" content="Explorer l'histoire sur une carte du monde, au fil du temps.">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◐</span>
+      <h1>Histomap</h1>
+    </div>
+    <label class="scenario-picker">
+      <span class="sr-only">Sujet</span>
+      <select id="scenario-select" aria-label="Choisir un sujet"></select>
+    </label>
+    <div class="topbar-actions">
+      <button id="btn-toggle-left" class="ghost" aria-label="Afficher le panneau gauche">☰</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Panneau gauche : description du sujet, légende, options -->
+    <aside id="left-panel" class="panel left">
+      <section class="scenario-intro">
+        <h2 id="scenario-title"></h2>
+        <p id="scenario-subtitle" class="muted"></p>
+        <p id="scenario-desc"></p>
+      </section>
+
+      <section>
+        <h3>Légende</h3>
+        <ul id="legend" class="legend"></ul>
+        <ul class="legend events-legend" id="events-legend"></ul>
+      </section>
+
+      <section>
+        <h3>Affichage</h3>
+        <label class="toggle"><input type="checkbox" id="opt-trail"> Garder les événements passés</label>
+        <label class="toggle"><input type="checkbox" id="opt-labels" checked> Noms des États</label>
+        <label class="toggle"><input type="checkbox" id="opt-modern"> Repères modernes (villes, routes)</label>
+        <label class="toggle"><input type="checkbox" id="opt-globe" checked> Globe 3D</label>
+        <label class="field">Fond de carte
+          <select id="opt-basemap">
+            <option value="voyager">Carte claire</option>
+            <option value="satellite">Satellite</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="sources muted small">
+        Frontières : <a href="https://github.com/aourednik/historical-basemaps" target="_blank" rel="noopener">historical-basemaps</a> (A. Ourednik, GPL-3.0) — tracés approximatifs, par instantanés.
+        Textes : <a href="https://fr.wikipedia.org" target="_blank" rel="noopener">Wikipédia</a> (CC BY-SA).
+      </section>
+    </aside>
+
+    <!-- Carte -->
+    <section class="map-wrap">
+      <div id="map" aria-label="Carte historique"></div>
+      <div id="snapshot-badge" class="badge" title="Les frontières proviennent d'instantanés datés : la carte affichée est la plus proche antérieure à l'année choisie.">Frontières : —</div>
+      <div id="loading" class="loading" hidden>Chargement des frontières…</div>
+    </section>
+
+    <!-- Inspecteur -->
+    <aside id="inspector" class="panel right">
+      <div class="inspector-head">
+        <h3>Inspecteur</h3>
+        <button id="btn-close-inspector" class="ghost" aria-label="Fermer l'inspecteur">✕</button>
+      </div>
+      <div id="inspector-body" class="inspector-body">
+        <p class="muted">Cliquez sur un territoire ou un point de la carte pour en afficher le détail.</p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Frise / curseur de temps -->
+  <footer class="timeline">
+    <div class="timeline-controls">
+      <button id="btn-prev" class="ghost" aria-label="Année précédente">◀</button>
+      <button id="btn-play" class="primary" aria-label="Lecture">▶</button>
+      <button id="btn-next" class="ghost" aria-label="Année suivante">▶︎|</button>
+      <select id="speed" aria-label="Vitesse de lecture">
+        <option value="1000">×1</option>
+        <option value="400" selected>×2</option>
+        <option value="150">×5</option>
+      </select>
+      <div class="year-display"><span id="year-label">—</span></div>
+    </div>
+    <div class="timeline-track-wrap">
+      <div id="periods" class="periods"></div>
+      <div id="ticks" class="ticks"></div>
+      <input id="year-slider" type="range" min="0" max="1" step="1" aria-label="Année">
+      <div class="scale"><span id="scale-min"></span><span id="scale-max"></span></div>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+  <script src="data/entities.js"></script>
+  <script src="data/scenarios.js"></script>
+  <script src="js/wiki.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
