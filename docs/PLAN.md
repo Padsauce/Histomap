@@ -4,7 +4,8 @@
 > (`F-xx`) pour être citée dans les tickets, commits et revues. Priorités : **M** (indispensable),
 > **S** (souhaitable), **C** (confort), **L** (plus tard).
 >
-> État : v0.1 — rédigé après le prototype (`index.html`, branche `claude/cultural-education-app-224852`).
+> État : v0.2 — décisions du 10/11/2026 intégrées (§ 17). Prototype : `index.html`,
+> branche `claude/cultural-education-app-224852`.
 
 ---
 
@@ -171,7 +172,7 @@ Fonctionnalités :
   aucune donnée précise n'existe (avec un indicateur visuel).
 - **F-25 (M)** Rapprochement polygone ↔ entité Wikidata (par nom, dates et position ; table de
   correspondance éditable).
-- **F-26 (S)** Import de données utilisateur, avec un assistant de correspondance des champs
+- **F-26 (C)** Import de données utilisateur, avec un assistant de correspondance des champs
   (nom, date de début, date de fin, entité).
 - **F-27 (S)** Territoires **contestés** ou à souveraineté partagée (hachures), vassalité
   (teinte du suzerain), zones d'influence (contour seul).
@@ -298,7 +299,7 @@ format que les sujets éditorialisés.
               │ temps réel                                     │ fichiers statiques
    query.wikidata.org (SPARQL) · API Wikidata          PMTiles (frontières, fond de carte)
    API REST Wikipédia · Commons                        Index mondial léger (par tranche de temps)
-   (option) serveur relais : cache SPARQL, clés IA     Sujets éditorialisés (JSON)
+   (plus tard) serveur : comptes, partage              Sujets éditorialisés (JSON)
 ```
 
 ### 9.2 Choix techniques
@@ -310,7 +311,7 @@ format que les sujets éditorialisés.
 | Carte | MapLibre GL (déjà en place) ; deck.gl pour les trajectoires animées si besoin | Globe, tuiles vectorielles, performance |
 | Tuiles | PMTiles sur hébergement statique | Pas de serveur de tuiles, extraction hors ligne possible |
 | Stockage local | IndexedDB (cache, paquets), localStorage (préférences) | Hors ligne, volumes importants |
-| Hébergement | Statique (GitHub Pages, Cloudflare Pages…) + relais optionnel | Coût minimal |
+| Hébergement | 100 % statique et gratuit : GitHub Pages ; scripts de données exécutés par GitHub Actions | Budget nul (décision § 17) |
 | Tests | Vitest (logique), Playwright (parcours) | Le prototype est déjà testé avec Playwright |
 
 ### 9.3 Données en temps réel : stratégie
@@ -329,8 +330,8 @@ L'exigence « ne pas tout stocker » est tenue, à une exception près, mesurée
 
 Contraintes à respecter : délai maximal de 60 s par requête SPARQL, limitation de débit et
 identification du client (User-Agent) ; requêtes regroupées, mises en cache et annulées lorsque
-l'utilisateur change de vue. Un point d'accès SPARQL alternatif ou un relais avec cache est prévu
-en secours.
+l'utilisateur change de vue. Budget nul : pas de relais ; en secours, un point d'accès SPARQL
+public alternatif et le cache local du navigateur.
 
 - **F-70 (M)** Couche d'accès aux données avec cache, limitation de débit et annulation.
 - **F-71 (M)** Mode dégradé explicite si une source ne répond pas (« Wikidata indisponible, données
@@ -474,6 +475,17 @@ Exigences :
 Chaque phase se termine par une version utilisable. Les durées ne sont pas estimées ici ; elles
 dépendront des moyens (seul, en équipe, avec l'IA).
 
+**Jalons**
+
+- 🎯 **Jalon A — Outil fonctionnel personnel** (fin de la phase 3) : utilisable au quotidien par le
+  porteur du projet, sur n'importe quel sujet, en ligne. C'est la priorité actuelle.
+- 🎯 **Jalon B — Démonstration à des professionnels de l'éducation** (fin de la phase 5) : mode
+  Préparation et hors ligne présentables, quelques sujets éditorialisés soignés.
+- 🎯 **Jalon C — Ouverture à d'autres utilisateurs** (phase 8) : comptes, partage.
+
+Tant que l'outil n'a qu'un utilisateur, on privilégie ce qui se voit et sert tout de suite ;
+l'industrialisation (comptes, serveur) attend le jalon C.
+
 ### Phase 0 — Prototype ✅ (fait)
 Globe MapLibre, frontières à instantanés (mode rapide), curseur annuel, rôles évolutifs, événements
 qui apparaissent et s'estompent, inspecteur Wikipédia, 3 sujets + exploration libre, lien partageable.
@@ -502,7 +514,7 @@ F-23, F-24, F-25 (fournisseurs, deux modes) · F-30 (PMTiles) · F-26 (import) �
 OpenHistoricalMap et d'un second jeu mondial · F-27, F-28 · F-21 (paléogéographie) · F-31
 (mouvements).
 **Critère de sortie** : la guerre de Cent Ans en mode précis montre la Bourgogne et l'évolution
-annuelle des possessions anglaises à partir de vos données.
+annuelle des possessions anglaises à partir de jeux de données publics.
 
 ### Phase 5 — Professeurs et hors ligne
 F-80 à F-86 · fond de carte auto-hébergé · application web progressive.
@@ -515,13 +527,20 @@ Traduction de l'interface et des sujets éditorialisés, F-93, F-94.
 ### Phase 7 — Intelligence artificielle
 § 12 : IA-1 et IA-2 d'abord, puis IA-3 et IA-5, enfin IA-4 et IA-6.
 
+### Phase 8 — Comptes et partage (après validation du projet)
+Comptes utilisateurs, bibliothèque de sujets en ligne, F-87 (partage entre professeurs),
+synchronisation des paquets. Nécessite un hébergement avec serveur (solutions à offre gratuite à
+évaluer à ce moment-là). Jusque-là : préférences et sujets dans le navigateur, échange par fichier
+`.histomap`.
+
 ---
 
 ## 16. Risques et parades
 
 | Risque | Impact | Parade |
 |---|---|---|
-| Lenteur ou limites de l'API SPARQL publique | Recherche lente, échecs | Requêtes ciblées, cache, index précalculé, relais en secours |
+| Lenteur ou limites de l'API SPARQL publique | Recherche lente, échecs | Requêtes ciblées, cache, index précalculé, point d'accès alternatif |
+| Limites des offres gratuites (taille du site GitHub Pages, minutes d'Actions) | Fond de carte hors ligne ou index trop lourds | Fond de carte hors ligne limité aux zooms bas ; index compacts ; tuiles détaillées en ligne seulement |
 | Frontières historiques lacunaires ou contestées | Erreurs visibles, crédibilité | Deux modes, badges de précision, import de données, sources affichées |
 | Licences incompatibles (GPL, CC BY-SA, CC BY-NC…) | Blocage de diffusion | Registre des licences par source ; données chargées et non incorporées au code ; choix de la licence du projet tôt |
 | Biais européocentré de Wikidata | Monde « vide » hors Europe | Importance normalisée par région, indicateur de couverture, sujets éditorialisés hors d'Europe |
@@ -531,15 +550,25 @@ Traduction de l'interface et des sujets éditorialisés, F-93, F-94.
 
 ---
 
-## 17. Questions ouvertes
+## 17. Décisions et questions ouvertes
 
-1. **Vos données de frontières** (« mes données trouvées ») : quels formats et quelles sources ?
-   Cela orientera l'import du mode précis.
-2. **Hébergement et budget** : 100 % statique et gratuit, ou un petit serveur (relais, comptes,
-   partage de sujets entre professeurs) ?
-3. **Comptes utilisateurs** : nécessaires un jour (partage, bibliothèque en ligne) ou jamais ?
-4. **Licence du projet** : libre (laquelle ?) ou propriétaire ? Cela conditionne certaines sources
-   (ex. GPL-3.0 pour historical-basemaps).
-5. **Nom et identité visuelle** : « Histomap » est-il définitif ?
-6. **Appareils prioritaires en classe** : tablettes, ordinateurs, tableau numérique ?
-7. **Sujets éditorialisés prioritaires** : lesquels voulez-vous en premier (programmes scolaires ?) ?
+### Décisions (10/11/2026)
+
+| Sujet | Décision | Conséquence dans le plan |
+|---|---|---|
+| Données de frontières | Uniquement des **jeux de données publics** | Mode précis fondé sur OpenHistoricalMap, Cliopatria, CShapes… ; l'import personnel (F-26) passe en confort |
+| Budget | **Aucun** pour le moment | Tout statique (GitHub Pages), scripts via GitHub Actions, aucun serveur ni relais |
+| Comptes utilisateurs | Nécessaires **plus tard**, après un outil fonctionnel | Phase 8, après les jalons A et B ; d'ici là, stockage local et fichiers |
+| Utilisateurs | Le porteur du projet seul pour l'instant ; présentation à des professionnels de l'éducation si le projet convainc | Jalon A (outil personnel) prioritaire, puis jalon B (démonstration) |
+| Langue | Français d'abord ; anglais et autres langues prévus | Traductions préparées dès la phase 1, traduction effective en phase 6 |
+| IA | Spécifiée, non développée | Phase 7 |
+
+### Questions encore ouvertes (non bloquantes)
+
+1. **Licence du projet** : tant que l'usage est personnel, rien ne presse. Avant toute diffusion,
+   choisir une licence compatible avec les sources (la GPL-3.0 d'historical-basemaps le permet si
+   le projet est lui-même sous GPL-3.0 ; sinon, charger ces données sans les incorporer, comme
+   aujourd'hui).
+2. **Nom et identité visuelle** : « Histomap » est-il définitif ?
+3. **Sujets éditorialisés prioritaires** pour la démonstration (jalon B) : programmes scolaires ?
+4. **Appareils en classe** (pour le jalon B) : tablettes, ordinateurs, tableau numérique ?
