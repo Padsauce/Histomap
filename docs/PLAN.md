@@ -4,7 +4,7 @@
 > (`F-xx`) pour être citée dans les tickets, commits et revues. Priorités : **M** (indispensable),
 > **S** (souhaitable), **C** (confort), **L** (plus tard).
 >
-> État : v0.2 — décisions du 10/11/2026 intégrées (§ 17). Prototype : `index.html`,
+> État : v0.3 — phase 1 livrée ; décisions du 10/11/2026 intégrées (§ 17). Prototype : `index.html`,
 > branche `claude/cultural-education-app-224852`.
 
 ---
@@ -490,15 +490,24 @@ l'industrialisation (comptes, serveur) attend le jalon C.
 Globe MapLibre, frontières à instantanés (mode rapide), curseur annuel, rôles évolutifs, événements
 qui apparaissent et s'estompent, inspecteur Wikipédia, 3 sujets + exploration libre, lien partageable.
 
-### Phase 1 — Fondations
-F-10, F-11, F-13, F-14 (frise adaptative) · F-40, F-41 (filtres à icônes) · F-01, F-02 (niveaux de
-détail) · F-04 (inspecteur à tiroirs) · F-70, F-71 (couche de données) · F-90 (traductions) ·
-passage à TypeScript + Vite · migration du format de sujet (§ 9.4) · F-110, F-112.
-**Critère de sortie** : les 4 sujets actuels fonctionnent sur le nouveau socle, avec la frise zoomable
-de l'heure au millénaire et les filtres.
+### Phase 1 — Fondations ✅ (livrée le 10/11/2026)
+Livré : F-10, F-11, F-13, F-14, F-15 (frise zoomable de 100 000 ans à 15 minutes, échelle initiale
+adaptée au sujet, densité par catégorie, lecture à vitesse relative au zoom, périodes sur plusieurs
+lignes et cliquables) · F-40, F-41 (filtres à icônes, compteurs, légende dynamique) · F-01, F-02, F-03
+(importance relative au cadrage du sujet, regroupement des points, indicateur d'éléments masqués) ·
+F-04 (inspecteur à tiroirs mémorisés, article complet dans un cadre isolé) · F-70, F-71 (file
+d'attente, cache IndexedDB, bandeau hors ligne) · F-90 (fichiers de traduction fr/en, sélecteur de
+langue) · F-110, F-111, F-112 (clavier, vue liste « Chronologie », palette daltonisme Okabe-Ito) ·
+modèle temporel du § 9.4 (années décimales + précision, dates floues) · F-115 (lien complet).
+Deux sujets de démonstration des échelles extrêmes : *Homo sapiens* (graduation 50 000 ans) et
+Austerlitz heure par heure.
+
+**Reporté** : passage à TypeScript + Vite → début de phase 2 (le code reste en JavaScript sans
+compilation tant qu'il n'y a pas de requêtes Wikidata ; la migration se fera avant d'ajouter le
+générateur de sujets).
 
 ### Phase 2 — Wikidata en temps réel
-F-60, F-61 (recherche) · F-63, F-65, F-66 (génération : souverain, guerre, État, personnalité) ·
+Passage à TypeScript + Vite (reporté de la phase 1) · F-60, F-61 (recherche) · F-63, F-65, F-66 (génération : souverain, guerre, État, personnalité) ·
 F-91, F-92 · F-100, F-101 · F-32 (trajectoires de personnages).
 **Critère de sortie** : taper « Charles Quint », « guerre de Sept Ans » ou « Soundiata Keïta » produit
 un sujet exploitable sans aucune donnée préparée.
