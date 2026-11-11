@@ -23,7 +23,9 @@
  *
  * L'importance décide de l'affichage selon le zoom (F-01) : 90 = toujours visible.
  */
-window.HISTOMAP_SCENARIOS = [
+import type { ScenarioSpec } from "../core/types";
+
+export const SCENARIOS: ScenarioSpec[] = [
   {
     id: "louis-xiv",
     title: "Le règne de Louis XIV",

@@ -1,5 +1,5 @@
 /* Interface strings — English. */
-(window.HISTOMAP_I18N = window.HISTOMAP_I18N || {}).en = {
+const dict: Record<string, string | string[]> = {
   "app.title": "Histomap",
   "app.chooseSubject": "Choose a subject",
   "app.menu": "Show left panel",
@@ -121,6 +121,34 @@
   "monthsShort": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   "dayFirst": "1",
 
+  "search.label": "Search for a subject, a date or a place",
+  "search.placeholder": "Search: Charles V, Seven Years' War, 1789, Kyoto in 1600…",
+  "search.cancel": "Cancel",
+  "search.gotoDate": "Go to {date}",
+  "search.placeAt": "See {place} in {year}",
+  "search.searching": "Searching…",
+  "search.none": "No results",
+  "search.error": "Search unavailable ({error})",
+  "search.hint": "Wikidata",
+  "gen.title": "Building the subject “{label}”",
+  "gen.step.type": "Identifying the kind of subject…",
+  "gen.step.person": "Person: reign, wars, places of life…",
+  "gen.step.war": "Conflict: battles, treaties, belligerents…",
+  "gen.step.event": "Event: looking for the parent conflict…",
+  "gen.step.parent": "Looking for the parent conflict…",
+  "gen.step.state": "State: heads of state, wars, events…",
+  "gen.step.place": "Place: nearby events…",
+  "gen.step.unknown": "Analysing data…",
+  "gen.failed": "Could not build this subject: {error}",
+  "group.curated": "Curated subjects",
+  "group.generated": "Generated subjects (Wikidata)",
+  "scenario.source": "Source: {link} — check important information.",
+  "inspector.wikidataSource": "Wikidata ({qid})",
+  "inspector.fixOnWikidata": "Report or fix on Wikidata",
+  "inspector.path": "Route",
+  "legend.path": "Route of {name}",
   "chrono.empty": "No events for the selected categories.",
   "chrono.count": "{n} event(s)"
 };
+
+export default dict;

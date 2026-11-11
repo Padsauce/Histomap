@@ -14,8 +14,8 @@ s'adapte au sujet, de 100 000 ans à l'heure.
 - L'onglet **Chronologie** offre une vue liste de tous les événements (navigation au clavier, lecteurs d'écran).
 - Le lien de la page (`#s=…&t=…&v=…&f=…`) conserve le sujet, la date, l'échelle et les filtres.
 
-Sujets fournis : Louis XIV, guerre de Cent Ans, épopée napoléonienne, Homo sapiens (préhistoire),
-bataille d'Austerlitz heure par heure, exploration libre.
+Sujets éditorialisés : Louis XIV, guerre de Cent Ans, épopée napoléonienne, Homo sapiens (préhistoire),
+bataille d'Austerlitz heure par heure, exploration libre. Tous les autres sujets se génèrent par la recherche.
 
 ### Raccourcis
 
@@ -25,35 +25,63 @@ bataille d'Austerlitz heure par heure, exploration libre.
 | ← → | Reculer / avancer d'une graduation |
 | Sur la frise : Maj + ← → | Grand pas |
 | Sur la frise : + − | Zoomer / dézoomer dans le temps |
+| / | Aller à la recherche |
 | Échap | Fermer l'inspecteur |
 
-## Lancer
+## Utiliser
 
-Aucune compilation : ouvrir `index.html` dans un navigateur (ou `python3 -m http.server`).
-Une connexion internet est nécessaire (fonds de carte, frontières, Wikipédia).
+**En ligne** : https://padsauce.github.io/Histomap/ (publié automatiquement à chaque push, voir plus bas).
+
+**Rechercher** (barre en haut, raccourci `/`) :
+- un sujet : « Charles Quint », « guerre de Sept Ans », « bataille de Waterloo », « Empire du Mali »,
+  « Victor Hugo »… → Histomap construit le sujet en direct depuis Wikidata ;
+- une date : « 1789 », « 52 av. J.-C. » ;
+- un lieu à une date : « Kyoto en 1600 ».
+
+Les sujets générés sont mémorisés dans le navigateur (8 derniers) et le lien de la page permet de les
+rouvrir ou de les partager (`#s=wd:Q7742…`).
+
+## Développer
+
+```bash
+npm install
+npm run dev        # serveur de développement (http://localhost:5173)
+npm test           # tests unitaires (Vitest)
+npm run build      # vérification des types + build de production dans dist/
+```
 
 ## Structure
 
 | Fichier | Rôle |
 |---|---|
-| `index.html`, `css/style.css` | Interface : panneaux, carte, filtres, inspecteur, frise |
-| `js/app.js` | Carte (MapLibre GL), rôles et couleurs, événements, filtres, inspecteur |
-| `js/timeline.js` | Frise zoomable (canvas) : graduations, périodes, densité, interactions |
-| `js/time.js` | Modèle temporel (années décimales, précisions, calendrier, formats) |
-| `js/net.js` | Accès réseau : file d'attente, cache mémoire et IndexedDB, mode dégradé |
-| `js/wiki.js` | Résumés et articles Wikipédia |
-| `js/i18n.js`, `i18n/*.js` | Textes d'interface (français, anglais) |
-| `data/scenarios.js` | Les sujets : acteurs, périodes, événements datés et géolocalisés |
-| `data/categories.js` | Catégories d'événements (icône, couleur, libellés) |
-| `data/entities.js` | Noms français et articles Wikipédia des États, selon l'époque |
+| `index.html`, `src/style.css` | Interface : recherche, panneaux, carte, filtres, inspecteur, frise |
+| `src/main.ts` | Application : carte (MapLibre GL), rôles et couleurs, événements, trajets, filtres, inspecteur, recherche |
+| `src/core/generator.ts` | Génération de sujets depuis Wikidata (recettes : souverain, personne, guerre, événement, État, lieu) |
+| `src/core/wikidata.ts` | Client Wikidata : recherche d'entités, SPARQL, libellés, conversion des dates |
+| `src/core/time.ts` | Modèle temporel (années décimales, précisions, calendrier, formats, graduations) |
+| `src/core/net.ts` | Accès réseau : file d'attente, cache mémoire et IndexedDB, mode dégradé, réessais |
+| `src/core/wiki.ts` | Résumés et articles Wikipédia |
+| `src/core/types.ts` | Types du modèle de données |
+| `src/ui/timeline.ts` | Frise zoomable (canvas) |
+| `src/i18n/` | Textes d'interface (français, anglais) |
+| `src/data/` | Sujets éditorialisés, catégories, noms d'États par époque |
+| `tests/` | Tests unitaires |
+| `.github/workflows/deploy.yml` | Build, tests et publication sur GitHub Pages |
 
-Ajouter un sujet = ajouter un objet dans `data/scenarios.js` (le schéma est documenté en tête du fichier).
+Ajouter un sujet éditorialisé = ajouter un objet dans `src/data/scenarios.ts` (schéma : `src/core/types.ts`).
+
+### Publication sur GitHub Pages
+
+Le workflow `.github/workflows/deploy.yml` construit et publie l'application à chaque push.
+Il faut l'activer **une seule fois** : dépôt GitHub → *Settings* → *Pages* → *Build and deployment* →
+*Source* : **GitHub Actions**.
 
 ## Sources et licences
 
 - Frontières : [historical-basemaps](https://github.com/aourednik/historical-basemaps) (A. Ourednik, GPL-3.0),
   chargées à la volée. Ce sont des **instantanés** (1650, 1700, 1715, 1783…) aux tracés approximatifs :
   la carte affiche l'instantané le plus proche antérieur à l'année choisie.
+- Données des sujets générés : Wikidata (CC0).
 - Textes et images : Wikipédia (CC BY-SA).
 - Fonds : © OpenStreetMap contributors, © CARTO ; imagerie © Esri.
 

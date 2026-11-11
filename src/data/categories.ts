@@ -3,7 +3,9 @@
  * Chaque catégorie a une icône, une couleur et un libellé par langue.
  * Plus tard (phase 2), chaque catégorie sera associée à des classes Wikidata (P31/P279).
  */
-window.HISTOMAP_CATEGORIES = [
+import type { Category } from "../core/types";
+
+export const CATEGORIES: Category[] = [
   { id: "conflit",     icon: "⚔️", color: "#c62828", label: { fr: "Batailles et conflits", en: "Battles and conflicts" } },
   { id: "traite",      icon: "📜", color: "#6a1b9a", label: { fr: "Traités et actes", en: "Treaties and acts" } },
   { id: "politique",   icon: "👑", color: "#00796b", label: { fr: "Événements politiques", en: "Political events" } },

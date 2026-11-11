@@ -4,7 +4,7 @@
 > (`F-xx`) pour être citée dans les tickets, commits et revues. Priorités : **M** (indispensable),
 > **S** (souhaitable), **C** (confort), **L** (plus tard).
 >
-> État : v0.3 — phase 1 livrée ; décisions du 10/11/2026 intégrées (§ 17). Prototype : `index.html`,
+> État : v0.4 — phases 1 et 2 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
 > branche `claude/cultural-education-app-224852`.
 
 ---
@@ -506,11 +506,26 @@ Austerlitz heure par heure.
 compilation tant qu'il n'y a pas de requêtes Wikidata ; la migration se fera avant d'ajouter le
 générateur de sujets).
 
-### Phase 2 — Wikidata en temps réel
-Passage à TypeScript + Vite (reporté de la phase 1) · F-60, F-61 (recherche) · F-63, F-65, F-66 (génération : souverain, guerre, État, personnalité) ·
-F-91, F-92 · F-100, F-101 · F-32 (trajectoires de personnages).
-**Critère de sortie** : taper « Charles Quint », « guerre de Sept Ans » ou « Soundiata Keïta » produit
-un sujet exploitable sans aucune donnée préparée.
+### Phase 2 — Wikidata en temps réel ✅ (livrée le 11/11/2026)
+Livré : passage à TypeScript + Vite (tests Vitest, build vérifié) · F-60 (recherche Wikidata avec
+autocomplétion, clavier, raccourci `/`) · F-61 (recherche par date « 1789 » et par lieu « Kyoto en
+1600 ») · F-63 (recettes souverain, personne, guerre, État) + événement isolé (remontée vers le
+conflit parent) et lieu (événements à moins de 30 km) · F-65 (localisation P625, sinon lieu P276) ·
+F-66 (rôles datés : belligérants actifs pendant leurs guerres) · F-32 (trajet de vie des personnes) ·
+F-100, F-101 (source Wikidata affichée, lien « signaler ou corriger ») · F-91 partiel (libellés dans
+la langue de l'interface, repli fr/en) · publication automatique sur GitHub Pages.
+
+Choix techniques notables :
+- Les États des sujets générés sont reliés aux frontières **par leur capitale** : l'État dont le
+  polygone contient la capitale sur la carte de l'époque est coloré. Aucune table de noms à maintenir.
+- Requêtes SPARQL **légères** (sans service d'étiquettes ni regroupement) puis libellés via l'API
+  Wikidata par lots de 50, avec repli SPARQL : environ 1 s par requête au lieu de 10 à 40 s.
+- Wikidata ne précise pas les **camps** des belligérants : ils sont tous colorés comme adversaires
+  potentiels et une note l'indique. Piste : déduire les camps des batailles (P710 + P1346 vainqueur).
+- Les sujets générés sont mémorisés localement (8 derniers) et recréés à l'ouverture d'un lien.
+
+Reste à faire (reporté) : F-64 (dynastie, invention, thème, période) · F-67 (score de qualité) ·
+F-92 complet (noms officiels datés P1448) · F-62.
 
 ### Phase 3 — Synchronie mondiale
 F-50, F-51 (Pendant ce temps) · F-72 (index mondial léger) · catégories Découvertes et Sciences ·

@@ -12,7 +12,9 @@
  * Les États absents d'ici sont résolus automatiquement via les liens
  * interlangues de Wikipédia (en → fr).
  */
-window.HISTOMAP_ENTITIES = {
+export interface EntityName { label: string; wiki: string; until?: number }
+
+export const ENTITIES: Record<string, EntityName | EntityName[]> = {
   "France": [
     { until: 1791, label: "Royaume de France", wiki: "Royaume de France" },
     { until: 1803, label: "République française", wiki: "Première République (France)" },

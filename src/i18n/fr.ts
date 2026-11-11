@@ -1,5 +1,5 @@
 /* Textes d'interface — français (langue de référence). */
-(window.HISTOMAP_I18N = window.HISTOMAP_I18N || {}).fr = {
+const dict: Record<string, string | string[]> = {
   "app.title": "Histomap",
   "app.chooseSubject": "Choisir un sujet",
   "app.menu": "Afficher le panneau gauche",
@@ -121,6 +121,34 @@
   "monthsShort": ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."],
   "dayFirst": "1er",
 
+  "search.label": "Rechercher un sujet, une date ou un lieu",
+  "search.placeholder": "Rechercher : Charles Quint, guerre de Sept Ans, 1789, Kyoto en 1600…",
+  "search.cancel": "Annuler",
+  "search.gotoDate": "Aller en {date}",
+  "search.placeAt": "Voir {place} en {year}",
+  "search.searching": "Recherche…",
+  "search.none": "Aucun résultat",
+  "search.error": "Recherche indisponible ({error})",
+  "search.hint": "Wikidata",
+  "gen.title": "Création du sujet « {label} »",
+  "gen.step.type": "Identification du type de sujet…",
+  "gen.step.person": "Personne : règne, guerres, lieux de vie…",
+  "gen.step.war": "Conflit : batailles, traités, belligérants…",
+  "gen.step.event": "Événement : recherche du conflit parent…",
+  "gen.step.parent": "Recherche du conflit parent…",
+  "gen.step.state": "État : chefs d'État, guerres, événements…",
+  "gen.step.place": "Lieu : événements à proximité…",
+  "gen.step.unknown": "Analyse des données…",
+  "gen.failed": "Impossible de créer ce sujet : {error}",
+  "group.curated": "Sujets éditorialisés",
+  "group.generated": "Sujets générés (Wikidata)",
+  "scenario.source": "Source : {link} — vérifiez les informations importantes.",
+  "inspector.wikidataSource": "Wikidata ({qid})",
+  "inspector.fixOnWikidata": "Signaler ou corriger sur Wikidata",
+  "inspector.path": "Trajet",
+  "legend.path": "Trajet de {name}",
   "chrono.empty": "Aucun événement pour les catégories sélectionnées.",
   "chrono.count": "{n} événement(s)"
 };
+
+export default dict;
