@@ -11,6 +11,7 @@ import { searchEntities, wdUrl, type SearchResult } from "./core/wikidata";
 import { generate, fetchFacts } from "./core/generator";
 import { Timeline, type TimelineEvent, type TimelineLane } from "./ui/timeline";
 import * as World from "./core/worldindex";
+import * as Borders from "./core/borders";
 import { CATEGORIES } from "./data/categories";
 import { SCENARIOS as CURATED } from "./data/scenarios";
 import type { Category, EventItem, Scenario, ScenarioSpec, ActorSpec } from "./core/types";
@@ -20,20 +21,6 @@ type Pt = [number, number];
 type FC = GeoJSON.FeatureCollection;
 type Feature = GeoJSON.Feature<GeoJSON.Geometry, Record<string, any>>;
 
-// ---------------------------------------------------------------------------
-// Frontières (mode rapide) : instantanés datés du projet historical-basemaps,
-// chargés à la demande depuis jsDelivr (version figée par commit).
-// ---------------------------------------------------------------------------
-const BASEMAPS_COMMIT = "4b5039e50d8d2464b065bd76ad6086cd4597108d";
-const BASEMAPS_URL = (y: number) =>
-  `https://cdn.jsdelivr.net/gh/aourednik/historical-basemaps@${BASEMAPS_COMMIT}/geojson/world_${y < 0 ? "bc" + (-y) : y}.geojson`;
-const SNAPSHOTS = [
-  -123000, -10000, -8000, -5000, -4000, -3000, -2000, -1500, -1000, -700, -500, -400, -323, -300,
-  -200, -100, -1, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1279, 1300, 1400,
-  1492, 1500, 1530, 1600, 1650, 1700, 1715, 1783, 1800, 1815, 1880, 1900, 1914, 1920, 1930, 1938,
-  1945, 1960, 1994, 2000, 2010
-].map(y => ({ year: y, t: Time.fromHistYear(y) }));
-type Snapshot = (typeof SNAPSHOTS)[number];
 
 const CAT = Object.fromEntries(CATEGORIES.map(c => [c.id, c])) as Record<string, Category>;
 const catLabel = (c: Category) => c.label[I18n.getLang()] || c.label.fr;
@@ -158,7 +145,7 @@ function normalize(sc: ScenarioSpec): Scenario {
     events,
     byIdx: Object.fromEntries(events.map(e => [e.idx, e])),
     paths: (sc.paths || []).map(p => ({
-      label: p.label, color: p.color,
+      label: p.label, color: p.color, kind: p.kind || "person",
       steps: p.steps.map(s => ({ t: Time.parse(s.date).t, coords: s.coords, label: s.label })).sort((a, b) => a.t - b.t)
     }))
   };
@@ -177,9 +164,9 @@ const state = {
   sc: scenarios[0],
   t: scenarios[0].startT,
   view: scenarios[0].bounds as [number, number],
-  snapshot: null as Snapshot | null,
-  geo: new Map<number, FC>(),
-  labels: new Map<number, { name: string; pt: Pt; area: number; props: Record<string, any> }[]>(),
+  frame: null as Borders.BordersFrame | null,
+  bordersMode: store.get<Borders.BordersMode>("bordersMode", "fast"),
+  labels: new Map<string, { name: string; pt: Pt; area: number; props: Record<string, any> }[]>(),
   decorated: null as FC | null,
   hiddenCats: new Set<string>(store.get<string[]>("hiddenCats", [])),
   showStates: true,
@@ -194,8 +181,8 @@ const state = {
   worldSig: "",
   hoverId: null as number | null,
   inspectToken: 0,
-  sig: { actors: "", labels: "", events: "", chrono: "", paths: "" },
-  actorNames: new Map<string, string[]>() // cache : instantané + acteur -> noms d'États (acteurs localisés par point)
+  sig: { actors: "", labels: "", events: "", chrono: "", paths: "", decorated: "" },
+  actorNames: new Map<string, string[]>() // cache : cadre de frontières + acteur -> noms d'États (acteurs localisés par point)
 };
 
 // ---------------------------------------------------------------------------
@@ -210,17 +197,51 @@ function actorColor(a: ActorSpec): string {
 }
 const activeActors = () => state.sc.actors.filter(a => !a.whenT || a.whenT.some(([x, y]) => state.t >= x && state.t < y));
 
-/** Noms d'États d'un acteur sur l'instantané courant : noms explicites + États contenant ses points. */
+/**
+ * Noms d'États d'un acteur sur le cadre courant. Priorité : identifiants Wikidata (mode précis),
+ * puis noms explicites, puis États contenant ses points (capitales…) — un point ne peut pas
+ * revendiquer un État déjà rattaché à un autre acteur par identifiant ou par nom (ex. : Paris,
+ * occupée par les Anglais en 1422, ne fait pas de l'Angleterre le « royaume de France »).
+ */
+const actorKey = (a: ActorN) => a.label + "|" + a.role;
+/** Pour chaque État du cadre : les acteurs qui le revendiquent par identifiant ou par nom. */
+function strongClaims(): Map<string, Set<string>> {
+  const key = state.sc.id + "|" + state.frame!.key;
+  const cached = strongCache.get(key);
+  if (cached) return cached;
+  const m = new Map<string, Set<string>>();
+  for (const a of state.sc.actors) {
+    if (a.preciseOnly && state.frame!.source !== "clio") continue;
+    const qids = new Set([...(a.qids || []), ...(a.qid ? [a.qid] : [])]);
+    for (const f of state.frame!.fc.features) {
+      const p = f.properties || {};
+      if ((p.QID && qids.has(p.QID)) || a.match.includes(p.NAME)) {
+        if (!m.has(p.NAME)) m.set(p.NAME, new Set());
+        m.get(p.NAME)!.add(actorKey(a));
+      }
+    }
+  }
+  strongCache.set(key, m);
+  if (strongCache.size > 50) strongCache.delete(strongCache.keys().next().value!);
+  return m;
+}
+const strongCache = new Map<string, Map<string, Set<string>>>();
 function actorMatch(a: ActorN): string[] {
-  if (!a.points?.length || !state.snapshot) return a.match;
-  const key = state.snapshot.year + "|" + a.label + "|" + a.points.map(p => p.join(",")).join(";");
+  if (a.preciseOnly && state.frame?.source !== "clio") return [];
+  if (!state.frame) return a.match;
+  const key = state.sc.id + "|" + state.frame.key + "|" + actorKey(a);
   let names = state.actorNames.get(key);
   if (!names) {
-    names = [...a.match];
-    const fc = state.geo.get(state.snapshot.year)!;
-    for (const pt of a.points) {
-      const f = fc.features.find(ft => ft.properties?.NAME && pointInGeom(pt, ft.geometry));
-      if (f && !names.includes(f.properties!.NAME)) names.push(f.properties!.NAME);
+    const strong = strongClaims();
+    const me = actorKey(a);
+    names = [...strong.entries()].filter(([, acts]) => acts.has(me)).map(([n]) => n);
+    for (const n of a.match) if (!names.includes(n)) names.push(n);
+    for (const pt of a.points || []) {
+      const f = state.frame.fc.features.find(ft => ft.properties?.NAME && pointInGeom(pt, ft.geometry));
+      if (!f) continue;
+      const owner = strong.get(f.properties!.NAME);
+      if (owner && !owner.has(me)) continue;
+      if (!names.includes(f.properties!.NAME)) names.push(f.properties!.NAME);
     }
     state.actorNames.set(key, names);
   }
@@ -247,10 +268,11 @@ function decorate(fc: FC): FC {
   };
 }
 
-function labelPoints(snap: number) {
+function labelPoints(frame: Borders.BordersFrame) {
+  const snap = frame.key;
   if (state.labels.has(snap)) return state.labels.get(snap)!;
   const byName = new Map<string, { pt: Pt; area: number; props: Record<string, any> }>();
-  state.geo.get(snap)!.features.forEach(f => {
+  frame.fc.features.forEach(f => {
     const name = f.properties?.NAME;
     if (!name) return;
     const lp = labelPoint(f.geometry);
@@ -262,17 +284,27 @@ function labelPoints(snap: number) {
   state.labels.set(snap, pts);
   return pts;
 }
-function labelCollection(snap: number): FC {
+/** Nom affiché d'un État : nom Wikidata dans la langue de l'interface (mode précis), sinon dictionnaire d'époque. */
+function stateLabel(props: Record<string, any>, year: number): string {
+  if (props.QID) return World.labelOf(props.QID)?.label || props.NAME;
+  const ent = Wiki.resolveEntity(props.NAME, year);
+  return ent ? ent.label : props.NAME;
+}
+function labelCollection(frame: Borders.BordersFrame): FC {
   const year = Time.histYear(state.t);
+  const pts = labelPoints(frame);
+  // Mode précis : libellés Wikidata chargés à la demande, puis réaffichés
+  const missing = pts.map(l => l.props.QID).filter((q: string) => q && !World.labelOf(q));
+  if (missing.length) World.loadLabels(missing, I18n.getLang()).then(() => { if (state.frame === frame) refreshLabels(true); });
   return {
     type: "FeatureCollection",
-    features: labelPoints(snap).map(l => {
+    features: pts.map(l => {
       const r = roleOf(l.props);
-      const ent = Wiki.resolveEntity(l.name, year);
+      const label = stateLabel(l.props, year);
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: l.pt },
-        properties: { label: ent ? ent.label : l.name, sort: (r.role === "other" ? 0 : 1e6) + l.area, important: r.role === "other" ? 0 : 1 }
+        properties: { label, sort: (r.role === "other" ? 0 : 1e6) + l.area, important: r.role === "other" ? 0 : 1 }
       };
     })
   };
@@ -335,17 +367,38 @@ function refreshEvents(force = false): void {
   scheduleWorld();
 }
 
-/** Trajets (F-32) : segments parcourus jusqu'à la date courante. */
+/**
+ * Trajets (F-32) et mouvements (F-31) : segments parcourus jusqu'à la date courante, flèches de
+ * direction et « tête » interpolée entre deux étapes (elle avance pendant la lecture).
+ */
 function refreshPaths(): void {
   const src = map.getSource("paths") as GeoJSONSource | undefined;
   if (!src) return;
   const features: Feature[] = [];
   for (const p of state.sc.paths) {
-    const done = p.steps.filter(s => s.t <= state.t);
-    if (done.length >= 2) features.push({ type: "Feature", geometry: { type: "LineString", coordinates: done.map(s => s.coords) }, properties: { color: p.color, kind: "line" } });
-    done.forEach((s, i) => features.push({ type: "Feature", geometry: { type: "Point", coordinates: s.coords }, properties: { color: p.color, kind: "step", last: i === done.length - 1 ? 1 : 0, label: s.label, date: Time.format(s.t, "year") } }));
+    const steps = p.steps;
+    if (!steps.length || state.t < steps[0].t) continue;
+    // Un mouvement terminé s'efface (comme un événement passé), sauf si l'on garde la trace
+    const linger = (state.view[1] - state.view[0]) * 0.04;
+    if (p.kind !== "person" && state.t > steps[steps.length - 1].t + linger && !$<HTMLInputElement>("opt-trail").checked) continue;
+    const done = steps.filter(s => s.t <= state.t);
+    const next = steps[done.length];
+    const coords = done.map(s => s.coords);
+    let head = coords[coords.length - 1];
+    if (next) {
+      const prev = done[done.length - 1];
+      const f = (state.t - prev.t) / Math.max(1e-9, next.t - prev.t);
+      head = [prev.coords[0] + (next.coords[0] - prev.coords[0]) * f, prev.coords[1] + (next.coords[1] - prev.coords[1]) * f];
+      coords.push(head);
+    }
+    const props = { color: p.color, ptype: p.kind, label: p.label };
+    if (coords.length >= 2) features.push({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { ...props, kind: "line" } });
+    done.forEach(s => features.push({ type: "Feature", geometry: { type: "Point", coordinates: s.coords }, properties: { ...props, kind: "step", label: s.label, date: Time.format(s.t, PRECISION_LEVEL[Time.levelForSpan(state.view[1] - state.view[0])] || "year") } }));
+    if (p.kind !== "person" && (next || state.t - steps[steps.length - 1].t < (state.view[1] - state.view[0]) * 0.004)) {
+      features.push({ type: "Feature", geometry: { type: "Point", coordinates: head }, properties: { ...props, kind: "head", label: p.label, date: "" } });
+    }
   }
-  const sig = features.length + ":" + state.sc.id;
+  const sig = state.sc.id + ":" + features.map(f => f.geometry.type === "Point" ? (f.geometry as GeoJSON.Point).coordinates.map(x => x.toFixed(3)).join(",") : (f.geometry as GeoJSON.LineString).coordinates.length).join("|");
   if (sig === state.sig.paths) return;
   state.sig.paths = sig;
   src.setData({ type: "FeatureCollection", features });
@@ -373,7 +426,10 @@ const map = new maplibregl.Map({
       voyager: { type: "raster", tiles: cartoTiles("voyager_nolabels"), tileSize: 256, attribution: "© OpenStreetMap contributors © CARTO" },
       modern: { type: "raster", tiles: cartoTiles("voyager_only_labels"), tileSize: 256 },
       satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Imagerie © Esri" },
-      states: { type: "geojson", data: emptyFC(), attribution: "Frontières : historical-basemaps (GPL-3.0)" },
+      states: { type: "geojson", data: emptyFC(), attribution: "Frontières : historical-basemaps (GPL-3.0) / Cliopatria (Seshat)" },
+      composites: { type: "geojson", data: emptyFC() },
+      user: { type: "geojson", data: emptyFC() },
+      paleo: { type: "geojson", data: emptyFC(), attribution: "Bathymétrie : Natural Earth" },
       labels: { type: "geojson", data: emptyFC() },
       paths: { type: "geojson", data: emptyFC() },
       // Les textes ont leurs propres sources : si la police ne se charge pas, seuls les textes manquent.
@@ -386,6 +442,10 @@ const map = new maplibregl.Map({
       { id: "bg", type: "background", paint: { "background-color": "#c9dbe6" } },
       { id: "voyager", type: "raster", source: "voyager", paint: { "raster-saturation": -0.4 } },
       { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
+      // Paléogéographie (F-21) : terres émergées au dernier maximum glaciaire, approximées par
+      // les plateaux continentaux (profondeur < 200 m) ; seules les mers profondes restent en bleu.
+      { id: "paleo-land", type: "background", layout: { visibility: "none" }, paint: { "background-color": "#d8c9a3", "background-opacity": 0 } },
+      { id: "paleo-sea", type: "fill", source: "paleo", layout: { visibility: "none" }, paint: { "fill-color": "#8fb5cf", "fill-opacity": 0 } },
       { id: "states-fill", type: "fill", source: "states", paint: { "fill-color": ["get", "_color"], "fill-opacity": ["interpolate", ["linear"], ["zoom"], 7, fillOpacity(1), 12, fillOpacity(0.45)] } },
       { id: "states-line", type: "line", source: "states", paint: { "line-color": "#4b5563", "line-opacity": 0.45, "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.4, 8, 1.2] } },
       {
@@ -394,6 +454,11 @@ const map = new maplibregl.Map({
         paint: { "line-color": ["get", "_color"], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 1.2, 8, 3] }
       },
       { id: "states-selected", type: "line", source: "states", filter: ["==", ["id"], -1], paint: { "line-color": "#111827", "line-width": 2.5, "line-dasharray": [2, 1] } },
+      // Frontières importées par l'utilisateur (F-26)
+      { id: "user-fill", type: "fill", source: "user", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.25 } },
+      { id: "user-line", type: "line", source: "user", paint: { "line-color": "#b45309", "line-width": 2.5, "line-dasharray": [1, 1] } },
+      // Ensembles composites du mode précis (empires, alliances, suzerainetés) : contour seul (F-27)
+      { id: "composites-line", type: "line", source: "composites", paint: { "line-color": "#374151", "line-width": ["interpolate", ["linear"], ["zoom"], 2, 1, 8, 2.2], "line-dasharray": [3, 2], "line-opacity": 0.75 } },
       { id: "modern", type: "raster", source: "modern", layout: { visibility: "none" }, paint: { "raster-opacity": 0.85 } },
       {
         id: "state-labels", type: "symbol", source: "labels",
@@ -405,14 +470,32 @@ const map = new maplibregl.Map({
         paint: { "text-color": "#1f2937", "text-halo-color": "rgba(255,255,255,.85)", "text-halo-width": 1.4 }
       },
       {
-        id: "paths-line", type: "line", source: "paths", filter: ["==", ["get", "kind"], "line"],
+        id: "paths-line", type: "line", source: "paths", filter: ["all", ["==", ["get", "kind"], "line"], ["==", ["get", "ptype"], "person"]],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 2, 10, 4], "line-dasharray": [2, 1.5], "line-opacity": 0.85 }
       },
       {
+        // Mouvements de troupes et voyages : trait plein, plus épais
+        id: "paths-move", type: "line", source: "paths", filter: ["all", ["==", ["get", "kind"], "line"], ["!=", ["get", "ptype"], "person"]],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 3, 10, 7], "line-opacity": 0.8 }
+      },
+      {
+        id: "paths-arrows", type: "symbol", source: "paths", filter: ["==", ["get", "kind"], "line"],
+        layout: {
+          "symbol-placement": "line", "symbol-spacing": 70, "icon-image": "arrow", "icon-size": ["interpolate", ["linear"], ["zoom"], 2, 0.7, 10, 1.2],
+          "icon-allow-overlap": true, "icon-rotation-alignment": "map"
+        },
+        paint: { "icon-color": ["get", "color"], "icon-halo-color": "#ffffff", "icon-halo-width": 1 }
+      },
+      {
+        id: "paths-head", type: "circle", source: "paths", filter: ["==", ["get", "kind"], "head"],
+        paint: { "circle-radius": 9, "circle-color": ["get", "color"], "circle-stroke-color": "#fff", "circle-stroke-width": 3, "circle-opacity": 0.95 }
+      },
+      {
         id: "paths-steps", type: "circle", source: "paths", filter: ["==", ["get", "kind"], "step"],
         paint: {
-          "circle-radius": ["case", ["==", ["get", "last"], 1], 7, 4], "circle-color": ["get", "color"],
+          "circle-radius": 4, "circle-color": ["get", "color"],
           "circle-stroke-color": "#fff", "circle-stroke-width": 2
         }
       },
@@ -456,6 +539,18 @@ const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, of
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
+/** Flèche de direction (image SDF, teintée par icon-color). */
+function addArrowIcon(): void {
+  const S = 32;
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = S;
+  const g = cv.getContext("2d")!;
+  g.fillStyle = "#000";
+  g.beginPath(); g.moveTo(6, 7); g.lineTo(27, 16); g.lineTo(6, 25); g.lineTo(11, 16); g.closePath(); g.fill();
+  const img = g.getImageData(0, 0, S, S);
+  if (!map.hasImage("arrow")) map.addImage("arrow", { width: S, height: S, data: new Uint8Array(img.data.buffer) }, { pixelRatio: 2, sdf: true });
+}
+
 /** Icônes de catégories : pastille colorée + pictogramme, dessinées en canvas. */
 function addCategoryIcons(): void {
   const S = 64;
@@ -476,40 +571,124 @@ function addCategoryIcons(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Chargement des frontières
+// Chargement des frontières (mode rapide ou précis, F-24)
 // ---------------------------------------------------------------------------
-const snapshotFor = (t: number) => { let s = SNAPSHOTS[0]; for (const x of SNAPSHOTS) if (x.t <= t + 1e-9) s = x; return s; };
 let loadSeq = 0;
-const ensureSnapshot = (snap: Snapshot): Promise<FC> => (state.geo.has(snap.year) ? Promise.resolve(state.geo.get(snap.year)!) :
-  Net.getJSON<FC>(BASEMAPS_URL(snap.year), { persist: true }).then(fc => { state.geo.set(snap.year, fc); return fc; }));
+function bordersBadge(f: Borders.BordersFrame): string {
+  return f.source === "clio" ? t_("map.bordersPrecise", { year: Time.fmtYearHist(f.year) }) : t_("map.borders", { year: Time.fmtYearHist(f.year) });
+}
+/** Le cadre de frontières doit-il changer pour cette date ? (sans chargement) */
+function frameStale(t: number): boolean {
+  if (!state.frame) return true;
+  if (state.bordersMode === "precise") return Time.histYear(t) !== state.frame.year;
+  return Borders.fastKey(t) !== state.frame.key;
+}
 
-async function refreshStates(): Promise<void> {
+async function refreshStates(force = false): Promise<void> {
   if (!map.getSource("states")) return;
-  const snap = snapshotFor(state.t);
   const seq = ++loadSeq;
-  if (!state.geo.has(snap.year)) { $("loading").hidden = false; $("loading").textContent = t_("map.loading"); }
-  try { await ensureSnapshot(snap); } catch (err) {
-    if (seq === loadSeq) $("loading").textContent = t_("map.loadError", { error: (err as Error).message });
+  const slow = window.setTimeout(() => { if (seq === loadSeq) { $("loading").hidden = false; $("loading").textContent = t_("map.loading"); } }, 250);
+  let frame: Borders.BordersFrame;
+  try { frame = await Borders.frameFor(state.t, state.bordersMode); } catch (err) {
+    clearTimeout(slow);
+    if (seq === loadSeq) { $("loading").hidden = false; $("loading").textContent = t_("map.loadError", { error: (err as Error).message }); }
     return;
   }
+  clearTimeout(slow);
   if (seq !== loadSeq) return;
   $("loading").hidden = true;
-  state.snapshot = snap;
-  state.decorated = decorate(state.geo.get(snap.year)!);
+  const sameShape = !force && state.frame?.key === frame.key && state.decorated;
+  state.frame = frame;
+  $("snapshot-badge").textContent = bordersBadge(frame);
+  if (sameShape && state.sig.decorated === state.sig.actors) return; // mêmes tracés, mêmes rôles
+  state.sig.decorated = state.sig.actors;
+  state.decorated = decorate(frame.fc);
   (map.getSource("states") as GeoJSONSource).setData(state.decorated);
+  (map.getSource("composites") as GeoJSONSource).setData(frame.composites);
   refreshLabels(true);
   renderLegend();
-  $("snapshot-badge").textContent = t_("map.borders", { year: Time.fmtYearHist(snap.year) });
   if (state.selected?.kind === "state") reselectState();
-  const next = SNAPSHOTS[SNAPSHOTS.indexOf(snap) + 1];
-  if (next && next.t <= state.sc.bounds[1]) ensureSnapshot(next).catch(() => {});
+  Borders.prefetch(state.t + (state.view[1] - state.view[0]) * 0.05, state.bordersMode);
 }
 function refreshLabels(force: boolean): void {
-  if (!state.snapshot) return;
-  const sig = state.snapshot.year + ":" + Time.histYear(state.t) + ":" + state.sig.actors;
+  if (!state.frame) return;
+  const sig = state.frame.key + ":" + Time.histYear(state.t) + ":" + state.sig.actors;
   if (!force && sig === state.sig.labels) return;
   state.sig.labels = sig;
-  (map.getSource("labels") as GeoJSONSource).setData(labelCollection(state.snapshot.year));
+  (map.getSource("labels") as GeoJSONSource).setData(labelCollection(state.frame));
+}
+
+// ---------------------------------------------------------------------------
+// Import de frontières (F-26) : GeoJSON avec dates de début et de fin facultatives
+// ---------------------------------------------------------------------------
+const FROM_KEYS = ["start_date", "FromYear", "from", "start", "begin", "valid_from", "date_start", "debut", "début"];
+const TO_KEYS = ["end_date", "ToYear", "to", "end", "valid_to", "date_end", "fin"];
+const NAME_KEYS = ["name", "NAME", "Name", "nom", "title", "label"];
+let userSig = "";
+function pickKey(props: Record<string, unknown>, keys: string[]): unknown {
+  for (const k of keys) if (props[k] !== undefined && props[k] !== null && props[k] !== "") return props[k];
+  return undefined;
+}
+function parseUserDate(v: unknown, end: boolean): number | null {
+  if (v === undefined) return null;
+  try { return end ? Time.endOf(String(v).split("T")[0]) : Time.parse(String(v).split("T")[0]).t; } catch { return null; }
+}
+async function importBorders(file: File): Promise<void> {
+  const status = $("user-status");
+  try {
+    const fc = JSON.parse(await file.text()) as FC;
+    if (fc.type !== "FeatureCollection" || !Array.isArray(fc.features)) throw new Error("FeatureCollection attendue");
+    let dated = 0;
+    const features = fc.features.filter(f => f.geometry).map((f, i) => {
+      const p = f.properties || {};
+      const t0 = parseUserDate(pickKey(p, FROM_KEYS), false), t1 = parseUserDate(pickKey(p, TO_KEYS), true);
+      if (t0 !== null || t1 !== null) dated++;
+      return { ...f, id: i, properties: { ...p, _name: String(pickKey(p, NAME_KEYS) ?? `#${i + 1}`), _t0: t0 ?? -1e7, _t1: t1 ?? 1e7 } };
+    });
+    (map.getSource("user") as GeoJSONSource).setData({ type: "FeatureCollection", features });
+    userSig = "";
+    updateUserLayer();
+    status.textContent = t_("import.done", { n: features.length, dated, file: file.name });
+  } catch (err) {
+    status.textContent = t_("import.error", { error: (err as Error).message });
+  }
+}
+function updateUserLayer(): void {
+  if (!map.getLayer("user-fill")) return;
+  const sig = state.t.toFixed(3);
+  if (sig === userSig) return;
+  userSig = sig;
+  const f: any = ["all", ["<=", ["get", "_t0"], state.t], [">=", ["get", "_t1"], state.t]];
+  map.setFilter("user-fill", f);
+  map.setFilter("user-line", f);
+}
+
+/**
+ * Paléogéographie : visible avant ≈ 6000 av. J.-C., pleinement avant 16 000 av. J.-C.
+ * (remontée du niveau marin après le dernier maximum glaciaire).
+ */
+let paleoLoaded = false, paleoLevel = -1;
+function paleoOpacity(t: number): number {
+  const Y = Time.histYear(t);
+  if (Y >= -6000) return 0;
+  if (Y <= -16000) return 1;
+  return (-6000 - Y) / 10000;
+}
+function updatePaleo(): void {
+  if (!map.getLayer("paleo-land")) return;
+  const k = Math.round(paleoOpacity(state.t) * 20) / 20;
+  if (k === paleoLevel) return;
+  paleoLevel = k;
+  if (k > 0 && !paleoLoaded) {
+    paleoLoaded = true;
+    (map.getSource("paleo") as GeoJSONSource).setData((import.meta.env.BASE_URL || "./") + "paleo/deep-sea.json");
+  }
+  const vis = k > 0 ? "visible" : "none";
+  map.setLayoutProperty("paleo-land", "visibility", vis);
+  map.setLayoutProperty("paleo-sea", "visibility", vis);
+  map.setPaintProperty("paleo-land", "background-opacity", 0.6 * k);
+  map.setPaintProperty("paleo-sea", "fill-opacity", 0.95 * k);
+  renderLegend();
 }
 
 // ---------------------------------------------------------------------------
@@ -530,8 +709,10 @@ function setTime(t: number, { fromTimeline = false, follow = false } = {}): void
   const actorsSig = activeActors().map(x => x.label + x.role).join("|");
   const actorsChanged = actorsSig !== state.sig.actors;
   state.sig.actors = actorsSig;
-  if (!state.snapshot || snapshotFor(t) !== state.snapshot || actorsChanged) refreshStates();
+  if (frameStale(t) || actorsChanged) refreshStates();
   else refreshLabels(false);
+  updatePaleo();
+  updateUserLayer();
   refreshEvents();
   updateDateLabel();
   writeHash();
@@ -622,7 +803,9 @@ function renderLegend(): void {
     if (seen.has(a.label)) continue; seen.add(a.label);
     items.push(`<li><span class="swatch" style="background:${actorColor(a)}"></span>${esc(a.label)}</li>`);
   }
-  for (const p of state.sc.paths) items.push(`<li><span class="swatch line" style="--c:${p.color}"></span>${esc(t_("legend.path", { name: p.label }))}</li>`);
+  if (paleoLevel > 0) items.push(`<li><span class="swatch" style="background:#d8c9a3"></span>${esc(t_("legend.paleo"))}</li>`);
+  if (state.frame?.composites.features.length) items.push(`<li><span class="swatch outline"></span>${esc(t_("legend.composites"))}</li>`);
+  for (const p of state.sc.paths) items.push(`<li><span class="swatch line${p.kind !== "person" ? " solid" : ""}" style="--c:${p.color}"></span>${esc(p.kind === "person" ? t_("legend.path", { name: p.label }) : p.label)}</li>`);
   if (state.sc.actors.length) {
     items.push(`<li><span class="swatch" style="background:${lighten(state.cvd ? CVD.focus[0] : "#2563eb")}"></span>${esc(t_("legend.subs"))}</li>`);
     items.push(`<li><span class="swatch" style="background:linear-gradient(90deg,#e6c9a8,#b8d8c0,#c8c0e0)"></span>${esc(t_("legend.others"))}</li>`);
@@ -672,8 +855,8 @@ function setScenario(id: string, { t, view, fly = true }: { t?: number; view?: [
   stopPlay();
   state.sc = scenarios.find(s => s.id === id) || scenarios[0];
   $<HTMLSelectElement>("scenario-select").value = state.sc.id;
-  state.snapshot = null;
-  state.sig = { actors: "", labels: "", events: "", chrono: "", paths: "" };
+  state.frame = null;
+  state.sig = { actors: "", labels: "", events: "", chrono: "", paths: "", decorated: "" };
   popup.remove();
   clearSelection();
   renderScenarioInfo();
@@ -908,14 +1091,30 @@ function inspectState(feature: { id?: string | number; properties: Record<string
   const year = Time.histYear(state.t);
   state.selected = { kind: "state", name: p.NAME, id: fid };
   map.setFilter("states-selected", ["==", ["id"], fid]);
-  const ent = Wiki.resolveEntity(p.NAME, year);
+  const clio = !!p.QID || p.FROM !== undefined;
+  const shown = stateLabel(p, year);
   const r = roleOf(p);
   const geom = state.decorated!.features[fid].geometry;
   const related = state.sc.events.filter(e => pointInGeom(e.coords, geom));
-  const suz = p.SUBJECTO && p.SUBJECTO !== p.NAME ? (Wiki.resolveEntity(p.SUBJECTO, year)?.label || p.SUBJECTO) : null;
+  const suz = p.SUBJECTO && p.SUBJECTO !== p.NAME ? (clio ? p.SUBJECTO : Wiki.resolveEntity(p.SUBJECTO, year)?.label || p.SUBJECTO) : null;
   const part = p.PARTOF && p.PARTOF !== p.NAME && p.PARTOF !== p.SUBJECTO ? p.PARTOF : null;
   const precision = t_("precision.border." + (p.BORDERPRECISION || "unknown"));
-  const snapLabel = Time.fmtYearHist(state.snapshot!.year);
+  const snapLabel = Time.fmtYearHist(state.frame!.year);
+  const bordersFact = clio
+    ? t_("inspector.bordersClio", { from: Time.fmtYearHist(p.FROM), to: Time.fmtYearHist(p.TO) })
+    : t_("inspector.bordersValue", { year: snapLabel, precision });
+  const bordersSrc = clio ? t_("inspector.bordersClioSource") : `${t_("inspector.bordersSource", { year: snapLabel })} — ${precision}`;
+  // Article : identifiant Wikidata du tracé (mode précis) ou dictionnaire d'époque
+  const articleRef = async (): Promise<{ title: string; lang: string }> => {
+    if (p.QID) {
+      await World.loadLabels([p.QID], I18n.getLang());
+      const fr = World.labelOf(p.QID)?.frwiki;
+      if (fr) return { title: fr, lang: "fr" };
+      if (p.WIKI) return { title: p.WIKI, lang: "en" };
+    }
+    return Wiki.entityArticle(p.NAME, year);
+  };
+  const summaryP = clio ? articleRef().then(a => Wiki.summary(a.title, a.lang)) : Wiki.entitySummary(p.NAME, year);
   const chipColor = r.actor ? actorColor(r.actor) : "#6b7280";
   // Un acteur localisé par un point (sujet généré) peut renvoyer vers son entité Wikidata
   const actorQid = r.actor?.qid;
@@ -923,17 +1122,17 @@ function inspectState(feature: { id?: string | number; properties: Record<string
   const body = $("inspector-body");
   body.innerHTML = `
     <div class="brief">
-      <h2><span class="swatch" style="background:${r.color}"></span>${esc(ent ? ent.label : p.NAME)}</h2>
+      <h2><span class="swatch" style="background:${r.color}"></span>${esc(shown)}</h2>
       <div><span class="chip" style="background:${chipColor}">${esc(t_("role." + r.role))}${r.actor ? " · " + esc(r.actor.label) : ""}</span></div>
       <div class="actions"><button id="btn-fit">${esc(t_("inspector.fit"))}</button></div>
     </div>`;
   body.appendChild(drawer("facts", t_("inspector.facts"), `<dl class="facts">
-      ${ent && ent.label !== p.NAME ? `<dt>${esc(t_("inspector.sourceName"))}</dt><dd>${esc(p.NAME)}</dd>` : ""}
+      ${shown !== p.NAME ? `<dt>${esc(t_("inspector.sourceName"))}</dt><dd>${esc(p.NAME)}</dd>` : ""}
       ${suz ? `<dt>${esc(t_("inspector.dependsOn"))}</dt><dd>${esc(suz)}</dd>` : ""}
       ${part ? `<dt>${esc(t_("inspector.partOf"))}</dt><dd>${esc(part)}</dd>` : ""}
-      <dt>${esc(t_("inspector.borders"))}</dt><dd>${esc(t_("inspector.bordersValue", { year: snapLabel, precision }))}</dd>
+      <dt>${esc(t_("inspector.borders"))}</dt><dd>${esc(bordersFact)}</dd>
     </dl>`));
-  body.appendChild(drawer("summary", t_("inspector.summary"), wikiBlock(Wiki.entitySummary(p.NAME, year), token)));
+  body.appendChild(drawer("summary", t_("inspector.summary"), wikiBlock(summaryP, token)));
   body.appendChild(drawer("chronology", t_("inspector.chronology"),
     related.length ? eventListHtml(related) : `<p class="muted small">${esc(t_("inspector.noRelated"))}</p>`));
   const roles = state.sc.actors.filter(a => actorMatch(a).includes(p.NAME));
@@ -943,11 +1142,12 @@ function inspectState(feature: { id?: string | number; properties: Record<string
       <strong>${esc(t_("role." + a.role))}</strong> · ${esc(a.label)}${a.when ? ` <span class="muted">(${a.when.map(([x, y]) => `${x}–${y}`).join(", ")})</span>` : ""}</li>`).join("")}</ul>`
     : `<p class="small muted">${esc(t_("inspector.notInSubject"))}</p>`));
   body.appendChild(drawer("sources", t_("inspector.sources"), `<dl class="facts">
-      <dt>${esc(t_("inspector.borders"))}</dt><dd>${esc(t_("inspector.bordersSource", { year: snapLabel }))} — ${esc(precision)}</dd>
+      <dt>${esc(t_("inspector.borders"))}</dt><dd>${esc(bordersSrc)}</dd>
+      ${p.QID ? `<dt>Wikidata</dt><dd><a href="${wdUrl(p.QID)}" target="_blank" rel="noopener">${esc(p.QID)}</a></dd>` : ""}
       <dt>${esc(t_("inspector.summary"))}</dt><dd>Wikipédia (CC BY-SA)</dd>
       ${actorQid ? `<dt>${esc(t_("inspector.dataSource"))}</dt><dd><a href="${wdUrl(actorQid)}" target="_blank" rel="noopener">${esc(t_("inspector.wikidataSource", { qid: actorQid }))}</a></dd>` : ""}
     </dl>`));
-  body.appendChild(articleDrawer(() => Wiki.entityArticle(p.NAME, year), token));
+  body.appendChild(articleDrawer(articleRef, token));
   $("btn-fit").onclick = () => {
     const b = bboxOf(geom);
     map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, duration: 1200, maxZoom: 9 });
@@ -965,7 +1165,7 @@ function reselectState(): void {
     map.setFilter("states-selected", ["==", ["id"], -1]);
     const note = document.createElement("p");
     note.className = "muted small";
-    note.textContent = t_("inspector.noLongerExists", { name, year: Time.fmtYearHist(state.snapshot!.year) });
+    note.textContent = t_("inspector.noLongerExists", { name, year: Time.fmtYearHist(state.frame!.year) });
     $("inspector-body").prepend(note);
   }
 }
@@ -1076,8 +1276,12 @@ async function refreshWorld(): Promise<void> {
   }
   state.worldAll = all;
   state.worldItems = items;
+  const dateKey = Time.format(state.t, Time.levelForSpan(state.view[1] - state.view[0]));
   const sig = `${state.showWorld}|${items.map(i => i.qid).join(",")}`;
-  if (sig === state.worldSig) return;
+  if (sig === state.worldSig) {
+    if (!state.selected && dateKey !== meanwhileDate) renderMeanwhile(); // seule la date affichée a changé
+    return;
+  }
   state.worldSig = sig;
   const maxSl = Math.max(1, ...items.map(i => i.sitelinks));
   (map.getSource("world") as GeoJSONSource | undefined)?.setData({
@@ -1090,11 +1294,12 @@ async function refreshWorld(): Promise<void> {
   if (!state.selected) renderMeanwhile();
 }
 
-let meanwhileToken = 0;
+let meanwhileToken = 0, meanwhileDate = "";
 /** Panneau « Pendant ce temps » (F-51) avec indicateur de couverture par région (F-102). */
 function renderMeanwhile(): void {
   if (state.selected) return;
   const token = ++meanwhileToken;
+  meanwhileDate = Time.format(state.t, Time.levelForSpan(state.view[1] - state.view[0]));
   const body = $("inspector-body");
   const [a, b] = worldWindow();
   const span = (b - a) / 2;
@@ -1204,7 +1409,7 @@ async function refreshLanes(): Promise<void> {
 // Interactions carte
 // ---------------------------------------------------------------------------
 map.on("mousemove", e => {
-  const ev = map.queryRenderedFeatures(e.point, { layers: ["events", "clusters", "paths-steps", "world-dots"] })[0];
+  const ev = map.queryRenderedFeatures(e.point, { layers: ["events", "clusters", "paths-steps", "paths-head", "world-dots"] })[0];
   if (ev) {
     map.getCanvas().style.cursor = "pointer";
     setHover(null);
@@ -1217,17 +1422,25 @@ map.on("mousemove", e => {
       if (it && !World.labelOf(it.qid)) World.loadLabels([it.qid], I18n.getLang()).then(show);
       return;
     }
-    const html = pr.title ? `<strong>${esc(pr.title)}</strong>` : pr.kind === "step" ? `${esc(t_("inspector.path"))} · <strong>${esc(pr.label)}</strong> (${esc(pr.date)})` : "";
+    const html = pr.title ? `<strong>${esc(pr.title)}</strong>`
+      : pr.kind === "step" ? `${esc(t_("inspector.path"))} · <strong>${esc(pr.label)}</strong> (${esc(pr.date)})`
+      : pr.kind === "head" ? `➜ <strong>${esc(pr.label)}</strong>` : "";
     if (html) popup.setLngLat((ev.geometry as GeoJSON.Point).coordinates as Pt).setHTML(html).addTo(map);
     else popup.remove();
+    return;
+  }
+  const uf = map.queryRenderedFeatures(e.point, { layers: ["user-fill"] })[0];
+  if (uf) {
+    map.getCanvas().style.cursor = "pointer";
+    setHover(null);
+    popup.setLngLat(e.lngLat).setHTML(`📥 <strong>${esc(uf.properties._name)}</strong>`).addTo(map);
     return;
   }
   const st = state.showStates ? map.queryRenderedFeatures(e.point, { layers: ["states-fill"] })[0] : undefined;
   if (st) {
     map.getCanvas().style.cursor = "pointer";
     setHover(Number(st.id));
-    const ent = Wiki.resolveEntity(st.properties.NAME, Time.histYear(state.t));
-    popup.setLngLat(e.lngLat).setHTML(esc(ent ? ent.label : st.properties.NAME || "")).addTo(map);
+    popup.setLngLat(e.lngLat).setHTML(esc(stateLabel(st.properties, Time.histYear(state.t)) || "")).addTo(map);
   } else {
     map.getCanvas().style.cursor = "";
     setHover(null);
@@ -1314,6 +1527,19 @@ $<HTMLInputElement>("opt-cvd").onchange = e => {
   state.cvd = (e.target as HTMLInputElement).checked; store.set("cvd", state.cvd);
   state.sig.actors = ""; setTime(state.t); renderLegend();
 };
+$<HTMLInputElement>("opt-import").onchange = e => {
+  const f = (e.target as HTMLInputElement).files?.[0];
+  if (f) importBorders(f);
+};
+$<HTMLSelectElement>("opt-borders").value = state.bordersMode;
+$<HTMLSelectElement>("opt-borders").onchange = e => {
+  state.bordersMode = (e.target as HTMLSelectElement).value as Borders.BordersMode;
+  store.set("bordersMode", state.bordersMode);
+  state.frame = null;
+  state.actorNames.clear();
+  refreshStates(true);
+  writeHash();
+};
 $<HTMLSelectElement>("opt-basemap").onchange = e => {
   const sat = (e.target as HTMLSelectElement).value === "satellite";
   map.setLayoutProperty("satellite", "visibility", sat ? "visible" : "none");
@@ -1324,7 +1550,7 @@ $<HTMLSelectElement>("opt-lang").onchange = e => {
   scenarios.forEach(s => s.events.forEach(ev => (ev.dateLabel = eventDateLabel(ev))));
   fillStatic(); renderScenarioInfo(); renderFilters(); renderChronology(); clearSelection();
   timeline.draw(); updateDateLabel(); refreshEvents(true);
-  if (state.snapshot) $("snapshot-badge").textContent = t_("map.borders", { year: Time.fmtYearHist(state.snapshot.year) });
+  if (state.frame) $("snapshot-badge").textContent = bordersBadge(state.frame);
 };
 $("btn-toggle-left").onclick = () => $("left-panel").classList.toggle("open");
 $("btn-close-inspector").onclick = () => $("inspector").classList.remove("open");
@@ -1351,6 +1577,7 @@ function writeHash(): void {
     p.set("t", state.t.toFixed(6));
     p.set("v", state.view.map(x => x.toFixed(6)).join(","));
     if (state.hiddenCats.size) p.set("f", [...state.hiddenCats].join(","));
+    if (state.bordersMode === "precise") p.set("b", "p");
     history.replaceState(null, "", "#" + p.toString());
   }, 300);
 }
@@ -1361,6 +1588,7 @@ function readHash() {
   else if (p.has("y")) out.t = Time.fromHistYear(parseInt(p.get("y")!, 10));
   if (p.has("v")) { const v = p.get("v")!.split(",").map(Number); if (v.length === 2 && v.every(Number.isFinite)) out.view = [v[0], v[1]]; }
   if (p.has("f")) out.hidden = p.get("f")!.split(",").filter(Boolean);
+  if (p.get("b") === "p") { state.bordersMode = "precise"; $<HTMLSelectElement>("opt-borders").value = "precise"; }
   return out;
 }
 async function openFromHash(fly: boolean): Promise<void> {
@@ -1388,6 +1616,7 @@ fillStatic();
 map.on("load", () => {
   map.setProjection({ type: "globe" });
   addCategoryIcons();
+  addArrowIcon();
   openFromHash(false).then(() => {
     const r = state.sc.raw;
     if (r.bbox) map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: 40, duration: 0, maxZoom: 11 });

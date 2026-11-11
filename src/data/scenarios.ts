@@ -14,6 +14,7 @@
  *     Les territoires dont le suzerain (SUBJECTO) correspond sont colorés
  *     dans une teinte plus claire (colonies, vassaux).
  *   periods: bandes affichées au-dessus de la frise { from, to, label, color }
+ *   paths:   trajets et mouvements { label, color, kind: "person" | "army" | "journey", steps: [{ date, coords, label }] }
  *   events:  points datés et localisés
  *     { date: "AAAA-MM-JJ" | "AAAA" | "AAAA-MM-JJTHH:MM" | "~-15000", end?: même format,
  *       precision?: "1e4y" | "millennium" | … (sinon déduite du format de la date),
@@ -35,13 +36,13 @@ export const SCENARIOS: ScenarioSpec[] = [
     start: 1643,
     view: { center: [4, 48.5], zoom: 4.2 },
     actors: [
-      { role: "focus", label: "Royaume de France", color: "#2563eb", match: ["France"] },
-      { role: "rival", label: "Monarchie espagnole", color: "#dc2626", match: ["Spain", "Habsburg Netherlands", "Viceroyalty of New Spain"], when: [[1635, 1700]] },
-      { role: "ally",  label: "Espagne (Philippe V)", color: "#16a34a", match: ["Spain", "Viceroyalty of New Spain"], when: [[1701, 1716]] },
-      { role: "rival", label: "Habsbourg d'Autriche & Saint-Empire", color: "#f97316", match: ["Austrian Empire", "Holy Roman Empire", "Austrian Netherlands"] },
-      { role: "rival", label: "Provinces-Unies", color: "#be185d", match: ["Dutch Republic", "Netherlands"], when: [[1672, 1678], [1688, 1713]] },
-      { role: "rival", label: "Angleterre", color: "#9f1239", match: ["England and Ireland", "England", "British American colonies"], when: [[1689, 1713]] },
-      { role: "ally",  label: "Angleterre (traité de Douvres)", color: "#22c55e", match: ["England and Ireland", "England"], when: [[1670, 1674]] }
+      { role: "focus", qids: ["Q207162"], label: "Royaume de France", color: "#2563eb", match: ["France"] , points: [[2.35, 48.86]] },
+      { role: "rival", qids: ["Q80702", "Q29"], label: "Monarchie espagnole", color: "#dc2626", match: ["Spain", "Habsburg Netherlands", "Viceroyalty of New Spain"], when: [[1635, 1700]] , points: [[-3.70, 40.42], [4.35, 50.85], [-99.13, 19.43]] },
+      { role: "ally",  qids: ["Q80702", "Q29"], label: "Espagne (Philippe V)", color: "#16a34a", match: ["Spain", "Viceroyalty of New Spain"], when: [[1701, 1716]] , points: [[-3.70, 40.42], [-99.13, 19.43]] },
+      { role: "rival", qids: ["Q66504140"], label: "Habsbourg d'Autriche & Saint-Empire", color: "#f97316", match: ["Austrian Empire", "Holy Roman Empire", "Austrian Netherlands"] , points: [[16.37, 48.21]] },
+      { role: "rival", qids: ["Q170072"], label: "Provinces-Unies", color: "#be185d", match: ["Dutch Republic", "Netherlands"], when: [[1672, 1678], [1688, 1713]] , points: [[4.90, 52.37]] },
+      { role: "rival", qids: ["Q179876", "Q23666"], label: "Angleterre", color: "#9f1239", match: ["England and Ireland", "England", "British American colonies"], when: [[1689, 1713]] , points: [[-0.13, 51.51]] },
+      { role: "ally",  qids: ["Q179876"], label: "Angleterre (traité de Douvres)", color: "#22c55e", match: ["England and Ireland", "England"], when: [[1670, 1674]] , points: [[-0.13, 51.51]] }
     ],
     periods: [
       { from: 1643, to: 1661, label: "Régence & Mazarin", color: "#64748b" },
@@ -89,15 +90,42 @@ export const SCENARIOS: ScenarioSpec[] = [
     start: 1337,
     view: { center: [0.5, 48], zoom: 4.8 },
     actors: [
-      { role: "focus", label: "Royaume de France (Valois)", color: "#2563eb", match: ["France"] },
-      { role: "rival", label: "Angleterre & possessions anglaises", color: "#dc2626", match: ["English territory", "England"] },
-      { role: "ally",  label: "Écosse (Auld Alliance)", color: "#16a34a", match: ["Scotland"] },
-      { role: "ally",  label: "Castille", color: "#22c55e", match: ["Castile", "Castille"], when: [[1369, 1460]] }
+      { role: "focus", qids: ["Q207162"], label: "Royaume de France (Valois)", color: "#2563eb", match: ["France"] , points: [[2.35, 48.86]] },
+      { role: "rival", qids: ["Q179876"], label: "Angleterre & possessions anglaises", color: "#dc2626", match: ["English territory", "England"] , points: [[-0.13, 51.51]] },
+      { role: "rival", label: "Guyenne anglaise", color: "#ef4444", match: [], points: [[-0.58, 44.84]], when: [[1337, 1453]] },
+      { role: "rival", qids: ["Q4712"], label: "Bourgogne (alliée des Anglais)", color: "#9f1239", match: [], preciseOnly: true, points: [[5.04, 47.32]], when: [[1419, 1435]] },
+      { role: "context", qids: ["Q4712"], label: "Bourgogne", color: "#a16207", match: [], preciseOnly: true, points: [[5.04, 47.32]], when: [[1330, 1418], [1436, 1460]] },
+      { role: "context", qids: ["Q71747"], label: "Duché de Bretagne", color: "#78716c", match: ["Britany"], points: [[-1.55, 47.22]] },
+      { role: "ally",  qids: ["Q230791"], label: "Écosse (Auld Alliance)", color: "#16a34a", match: ["Scotland"] , points: [[-3.19, 55.95]] },
+      { role: "ally",  qids: ["Q217196"], label: "Castille", color: "#22c55e", match: ["Castile", "Castille"], when: [[1369, 1460]] , points: [[-3.70, 42.34]] }
     ],
     periods: [
       { from: 1337, to: 1360, label: "Phase édouardienne", color: "#b91c1c" },
       { from: 1369, to: 1389, label: "Phase caroline", color: "#1d4ed8" },
       { from: 1415, to: 1453, label: "Phase lancastrienne", color: "#b91c1c" }
+    ],
+    paths: [
+      {
+        label: "Chevauchée d'Édouard III (1346)", color: "#dc2626", kind: "army",
+        steps: [
+          { date: "1346-07-12", coords: [-1.27, 49.59], label: "Débarquement à Saint-Vaast-la-Hougue" },
+          { date: "1346-07-26", coords: [-0.37, 49.18], label: "Prise de Caen" },
+          { date: "1346-08-16", coords: [2.05, 48.93], label: "Passage de la Seine à Poissy" },
+          { date: "1346-08-24", coords: [1.78, 50.12], label: "Passage de la Somme à Blanchetaque" },
+          { date: "1346-08-26", coords: [1.89, 50.26], label: "Bataille de Crécy" },
+          { date: "1346-09-04", coords: [1.86, 50.95], label: "Début du siège de Calais" }
+        ]
+      },
+      {
+        label: "Chevauchée de Jeanne d'Arc (1429)", color: "#2563eb", kind: "journey",
+        steps: [
+          { date: "1429-02-23", coords: [5.66, 48.60], label: "Départ de Vaucouleurs" },
+          { date: "1429-03-06", coords: [0.24, 47.17], label: "Chinon : rencontre avec le dauphin" },
+          { date: "1429-04-27", coords: [1.33, 47.59], label: "Blois : l'armée de secours se rassemble" },
+          { date: "1429-04-29", coords: [1.91, 47.90], label: "Entrée dans Orléans assiégée" },
+          { date: "1429-07-17", coords: [4.03, 49.26], label: "Sacre de Charles VII à Reims" }
+        ]
+      }
     ],
     events: [
       { date: "1340-06-24", category: "conflit", title: "Bataille de l'Écluse", place: "Sluis", coords: [3.3900, 51.3100], wiki: "Bataille de L'Écluse", summary: "La flotte française est anéantie ; l'Angleterre maîtrise la Manche." },
@@ -122,25 +150,65 @@ export const SCENARIOS: ScenarioSpec[] = [
     id: "napoleon",
     title: "L'épopée napoléonienne",
     subtitle: "1796 – 1821",
-    description: "De la campagne d'Italie à Sainte-Hélène : l'ascension de Bonaparte, l'Empire et les coalitions européennes. Attention : le jeu de frontières n'a pas d'instantané entre 1800 et 1815, l'extension maximale de l'Empire (1812) n'est donc pas encore dessinée.",
+    description: "De la campagne d'Italie à Sainte-Hélène : l'ascension de Bonaparte, l'Empire et les coalitions européennes. En mode rapide, les frontières n'ont pas d'instantané entre 1800 et 1815 ; passez en mode précis (Affichage → Frontières) pour suivre l'extension de l'Empire année par année.",
     range: [1795, 1821],
     start: 1796,
     view: { center: [12, 50], zoom: 3.6 },
     actors: [
-      { role: "focus", label: "France", color: "#2563eb", match: ["France"] },
-      { role: "rival", label: "Grande-Bretagne", color: "#dc2626", match: ["United Kingdom", "United Kingdom of Great Britain and Ireland"] },
-      { role: "rival", label: "Autriche", color: "#f97316", match: ["Austrian Empire", "Holy Roman Empire", "Austrian Netherlands", "Milano (Austria)"], when: [[1795, 1801], [1805, 1805], [1809, 1809], [1813, 1815]] },
-      { role: "rival", label: "Russie", color: "#9f1239", match: ["Russian Empire"], when: [[1799, 1800], [1805, 1807], [1812, 1815]] },
-      { role: "rival", label: "Prusse", color: "#be185d", match: ["Prussia"], when: [[1806, 1807], [1813, 1815]] },
-      { role: "rival", label: "Empire ottoman", color: "#a16207", match: ["Ottoman Empire"], when: [[1798, 1801]] },
-      { role: "ally",  label: "Espagne", color: "#16a34a", match: ["Spain"], when: [[1796, 1807]] },
-      { role: "rival", label: "Espagne insurgée", color: "#ef4444", match: ["Spain"], when: [[1808, 1814]] }
+      { role: "focus", qids: ["Q207162", "Q58296", "Q71084"], label: "France", color: "#2563eb", match: ["France"] , points: [[2.35, 48.86]] },
+      { role: "rival", qids: ["Q23666"], label: "Grande-Bretagne", color: "#dc2626", match: ["United Kingdom", "United Kingdom of Great Britain and Ireland"] , points: [[-0.13, 51.51]] },
+      { role: "rival", qids: ["Q66504140", "Q131964"], label: "Autriche", color: "#f97316", match: ["Austrian Empire", "Holy Roman Empire", "Austrian Netherlands", "Milano (Austria)"], when: [[1795, 1801], [1805, 1805], [1809, 1809], [1813, 1815]] , points: [[16.37, 48.21]] },
+      { role: "rival", qids: ["Q34266"], label: "Russie", color: "#9f1239", match: ["Russian Empire"], when: [[1799, 1800], [1805, 1807], [1812, 1815]] , points: [[30.31, 59.94]] },
+      { role: "rival", qids: ["Q27306"], label: "Prusse", color: "#be185d", match: ["Prussia"], when: [[1806, 1807], [1813, 1815]] , points: [[13.40, 52.52]] },
+      { role: "rival", qids: ["Q12560"], label: "Empire ottoman", color: "#a16207", match: ["Ottoman Empire"], when: [[1798, 1801]] , points: [[28.98, 41.01]] },
+      { role: "ally",  qids: ["Q80702", "Q29"], label: "Espagne", color: "#16a34a", match: ["Spain"], when: [[1796, 1807]] , points: [[-3.70, 40.42]] },
+      { role: "rival", qids: ["Q80702", "Q29"], label: "Espagne insurgée", color: "#ef4444", match: ["Spain"], when: [[1808, 1814]] , points: [[-3.70, 40.42]] }
     ],
     periods: [
       { from: 1796, to: 1799, label: "Directoire", color: "#64748b" },
       { from: 1799, to: 1804, label: "Consulat", color: "#0f766e" },
       { from: 1804, to: 1814, label: "Premier Empire", color: "#1d4ed8" },
       { from: 1815, to: 1821, label: "Exil", color: "#475569" }
+    ],
+    paths: [
+      {
+        label: "Expédition d'Égypte (1798-1799)", color: "#2563eb", kind: "army",
+        steps: [
+          { date: "1798-05-19", coords: [5.93, 43.12], label: "Départ de Toulon" },
+          { date: "1798-06-10", coords: [14.51, 35.90], label: "Prise de Malte" },
+          { date: "1798-07-01", coords: [29.92, 31.20], label: "Débarquement à Alexandrie" },
+          { date: "1798-07-21", coords: [31.21, 30.07], label: "Bataille des Pyramides" },
+          { date: "1798-07-24", coords: [31.24, 30.04], label: "Entrée au Caire" },
+          { date: "1799-03-07", coords: [34.75, 32.05], label: "Prise de Jaffa" },
+          { date: "1799-03-20", coords: [35.07, 32.93], label: "Siège de Saint-Jean-d'Acre" },
+          { date: "1799-06-14", coords: [31.24, 30.04], label: "Retour au Caire" },
+          { date: "1799-07-25", coords: [30.07, 31.32], label: "Bataille terrestre d'Aboukir" },
+          { date: "1799-08-23", coords: [29.92, 31.20], label: "Bonaparte quitte l'Égypte" },
+          { date: "1799-10-09", coords: [6.74, 43.43], label: "Débarquement à Fréjus" }
+        ]
+      },
+      {
+        label: "Campagne de Russie (1812)", color: "#1d4ed8", kind: "army",
+        steps: [
+          { date: "1812-06-24", coords: [23.90, 54.90], label: "Passage du Niémen à Kowno" },
+          { date: "1812-06-28", coords: [25.28, 54.69], label: "Entrée dans Vilnius" },
+          { date: "1812-07-28", coords: [30.20, 55.19], label: "Vitebsk" },
+          { date: "1812-08-17", coords: [32.05, 54.78], label: "Bataille de Smolensk" },
+          { date: "1812-09-07", coords: [35.82, 55.52], label: "Bataille de la Moskova" },
+          { date: "1812-09-14", coords: [37.62, 55.76], label: "Entrée dans Moscou" }
+        ]
+      },
+      {
+        label: "Retraite de Russie (1812)", color: "#64748b", kind: "army",
+        steps: [
+          { date: "1812-10-19", coords: [37.62, 55.76], label: "Départ de Moscou" },
+          { date: "1812-10-24", coords: [36.47, 55.01], label: "Bataille de Maloïaroslavets" },
+          { date: "1812-11-09", coords: [32.05, 54.78], label: "Smolensk" },
+          { date: "1812-11-27", coords: [28.35, 54.33], label: "Passage de la Bérézina" },
+          { date: "1812-12-08", coords: [25.28, 54.69], label: "Vilnius" },
+          { date: "1812-12-14", coords: [23.90, 54.90], label: "Repassage du Niémen à Kowno" }
+        ]
+      }
     ],
     events: [
       { date: "1796-11-15", category: "conflit", title: "Bataille du pont d'Arcole", place: "Arcole", coords: [11.2700, 45.3600], wiki: "Bataille du pont d'Arcole", summary: "Bonaparte, général de l'armée d'Italie, bat les Autrichiens." },
@@ -172,7 +240,7 @@ export const SCENARIOS: ScenarioSpec[] = [
     id: "sapiens",
     title: "Homo sapiens à la conquête du monde",
     subtitle: "≈ 300 000 – 10 000 ans av. J.-C.",
-    description: "Des premiers Homo sapiens d'Afrique à la naissance des premiers villages : la dispersion de notre espèce sur tous les continents. Les datations sont approximatives et pour certaines débattues ; la carte de fond montre les autres humanités (Néandertaliens, Homo erectus…) telles que reconstituées vers 123 000 av. J.-C. Le niveau des mers, plus bas pendant les glaciations, n'est pas encore représenté.",
+    description: "Des premiers Homo sapiens d'Afrique à la naissance des premiers villages : la dispersion de notre espèce sur tous les continents. Les datations sont approximatives et pour certaines débattues ; la carte de fond montre les autres humanités (Néandertaliens, Homo erectus…) telles que reconstituées vers 123 000 av. J.-C. Avant 6000 av. J.-C., la carte montre aussi les terres émergées par la baisse du niveau des mers (approximation : plateaux continentaux de moins de 200 m de profondeur).",
     range: [-320000, -8000],
     start: -320000,
     view: { center: [40, 20], zoom: 1.5 },
@@ -218,9 +286,9 @@ export const SCENARIOS: ScenarioSpec[] = [
     start: "1805-12-02T06:00",
     view: { center: [16.76, 49.14], zoom: 11.3 },
     actors: [
-      { role: "focus", label: "Empire français", color: "#2563eb", match: ["France"] },
-      { role: "rival", label: "Empire d'Autriche", color: "#f97316", match: ["Austrian Empire", "Holy Roman Empire"] },
-      { role: "rival", label: "Empire russe", color: "#9f1239", match: ["Russian Empire"] }
+      { role: "focus", qids: ["Q71084"], label: "Empire français", color: "#2563eb", match: ["France"] , points: [[2.35, 48.86]] },
+      { role: "rival", qids: ["Q131964", "Q66504140"], label: "Empire d'Autriche", color: "#f97316", match: ["Austrian Empire", "Holy Roman Empire"] , points: [[16.37, 48.21]] },
+      { role: "rival", qids: ["Q34266"], label: "Empire russe", color: "#9f1239", match: ["Russian Empire"] , points: [[30.31, 59.94]] }
     ],
     periods: [
       { from: "1805-12-01T18:00", to: "1805-12-02T06:59", label: "Veillée", color: "#475569" },

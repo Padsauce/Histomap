@@ -4,7 +4,7 @@
 > (`F-xx`) pour être citée dans les tickets, commits et revues. Priorités : **M** (indispensable),
 > **S** (souhaitable), **C** (confort), **L** (plus tard).
 >
-> État : v0.5 — phases 1 à 3 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
+> État : v0.6 — phases 1 à 4 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
 > branche `claude/cultural-education-app-224852`.
 
 ---
@@ -551,12 +551,36 @@ Biais constaté (F-102) : 61 % des éléments sont situés en Europe, et l'index
 après 1500. La normalisation par région limite l'effet à l'affichage ; les sujets éditorialisés hors
 d'Europe restent la vraie parade.
 
-### Phase 4 — Cartographie précise
-F-23, F-24, F-25 (fournisseurs, deux modes) · F-30 (PMTiles) · F-26 (import) · intégration
-OpenHistoricalMap et d'un second jeu mondial · F-27, F-28 · F-21 (paléogéographie) · F-31
-(mouvements).
-**Critère de sortie** : la guerre de Cent Ans en mode précis montre la Bourgogne et l'évolution
-annuelle des possessions anglaises à partir de jeux de données publics.
+### Phase 4 — Cartographie précise ✅ (livrée le 11/11/2026)
+Livré : F-23, F-24 (fournisseurs de frontières et bascule mode rapide / mode précis, repli
+automatique) · F-25 (rattachement des États par identifiant Wikidata, puis nom, puis capitale) ·
+intégration de **Cliopatria** (Seshat Global History Databank : ≈ 1 600 entités, 3400 av. J.-C. →
+2024, résolution de quelques années, identifiants Wikidata) · F-27 partiel (ensembles composites —
+empires, alliances, suzerainetés — en contour pointillé ; vassaux en teinte claire) · F-21
+(paléogéographie : plateaux continentaux émergés avant 6000 av. J.-C., d'après la bathymétrie
+Natural Earth) · F-31 (mouvements de troupes et voyages : flèches, tête de colonne interpolée qui
+avance pendant la lecture ; chevauchée d'Édouard III, itinéraire de Jeanne d'Arc, expédition
+d'Égypte, campagne et retraite de Russie) · F-26 (import de frontières GeoJSON datées, sans envoi).
+
+**Critère de sortie atteint** : en mode précis, la guerre de Cent Ans montre la Bourgogne (adversaire
+de 1419 à 1435, puis neutre), la Guyenne anglaise et l'extension des possessions anglaises en 1422
+(Paris compris), avec des tracés renouvelés tous les 2 à 10 ans.
+
+Choix techniques notables :
+- Cliopatria n'est pas stocké dans le dépôt (≈ 57 Mo une fois découpé) : le déploiement le
+  télécharge et le prépare à chaque publication (`tools/build-borders.mjs`, tranches de 25 à 400 ans,
+  la plus lourde ≈ 1,3 Mo compressée). En cas d'échec, l'application reste en mode rapide.
+- Rattachement par identifiant d'abord : une capitale occupée (Paris en 1422) ne doit pas faire
+  passer l'occupant pour le sujet.
+
+Reste à faire : F-28 (transitions animées entre deux états de frontières) · F-29 (éditeur) ·
+F-30 (PMTiles, si le volume l'exige) · OpenHistoricalMap (plans de villes anciens, non testé :
+hôte non accessible depuis l'environnement de développement) · F-33 (mode bataille heure par heure
+avec positions d'unités : nécessite des données éditorialisées fiables).
+
+**Licence à vérifier avant toute diffusion publique** : le dépôt Cliopatria ne déclare pas de licence
+sur GitHub ; la publication associée (Scientific Data, 2025) et Zenodo (enregistrement 13363121)
+doivent être consultés.
 
 ### Phase 5 — Professeurs et hors ligne
 F-80 à F-86 · fond de carte auto-hébergé · application web progressive.

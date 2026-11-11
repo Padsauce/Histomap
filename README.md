@@ -11,6 +11,11 @@ s'adapte au sujet, de 100 000 ans à l'heure.
 - La **frise** se zoome comme une carte : molette, pincement, glisser, clic ; ses graduations s'adaptent.
 - L'**inspecteur** (à droite) s'organise en tiroirs : faits clés, résumé Wikipédia, chronologie liée,
   acteurs, sources, article complet.
+- **Deux modes de frontières** (Affichage → Frontières) : *rapide* (instantanés historical-basemaps,
+  monde entier) ou *précis* (Cliopatria, année par année, de 3400 av. J.-C. à 2024, avec les empires et
+  alliances en pointillé). Avant 6000 av. J.-C., la carte montre les terres émergées par la baisse des mers.
+- **Mouvements** : armées et voyages avec flèches et tête de colonne qui avance pendant la lecture.
+- **Import** de vos propres frontières (GeoJSON daté), qui restent dans votre navigateur.
 - **Pendant ce temps** : l'inspecteur montre, région par région, ce qui se passe ailleurs dans le
   monde au même moment ; la couche « 🌍 Monde » l'affiche sur la carte et le bouton ☷ ajoute des
   frises parallèles par région sous la frise principale.
@@ -52,6 +57,7 @@ npm run dev        # serveur de développement (http://localhost:5173)
 npm test           # tests unitaires (Vitest)
 npm run build      # vérification des types + build de production dans dist/
 npm run build:index  # reconstruit l'index mondial (public/index) depuis Wikidata (≈ 30 s)
+npm run build:borders  # télécharge Cliopatria et prépare le mode précis (public/borders, non versionné)
 ```
 
 ## Structure
@@ -68,6 +74,9 @@ npm run build:index  # reconstruit l'index mondial (public/index) depuis Wikidat
 | `src/core/worldindex.ts` | Index mondial : chargement par tranches, régions, libellés |
 | `tools/build-index.mjs` | Construction de l'index mondial (QLever, repli Wikidata) |
 | `public/index/` | Index mondial (fichiers statiques) |
+| `src/core/borders.ts` | Fournisseurs de frontières : mode rapide, mode précis (Cliopatria) |
+| `tools/build-borders.mjs` | Préparation de Cliopatria et des plateaux continentaux |
+| `public/paleo/` | Mers profondes (Natural Earth, domaine public) pour la paléogéographie |
 | `src/core/types.ts` | Types du modèle de données |
 | `src/ui/timeline.ts` | Frise zoomable (canvas) |
 | `src/i18n/` | Textes d'interface (français, anglais) |
@@ -88,6 +97,9 @@ Il faut l'activer **une seule fois** : dépôt GitHub → *Settings* → *Pages*
 - Frontières : [historical-basemaps](https://github.com/aourednik/historical-basemaps) (A. Ourednik, GPL-3.0),
   chargées à la volée. Ce sont des **instantanés** (1650, 1700, 1715, 1783…) aux tracés approximatifs :
   la carte affiche l'instantané le plus proche antérieur à l'année choisie.
+- Frontières précises : [Cliopatria](https://github.com/Seshat-Global-History-Databank/cliopatria)
+  (Seshat Global History Databank) — licence à vérifier avant diffusion publique.
+- Bathymétrie : [Natural Earth](https://www.naturalearthdata.com) (domaine public).
 - Données des sujets générés : Wikidata (CC0).
 - Textes et images : Wikipédia (CC BY-SA).
 - Fonds : © OpenStreetMap contributors, © CARTO ; imagerie © Esri.

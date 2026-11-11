@@ -181,6 +181,18 @@ const dict: Record<string, string | string[]> = {
   "regionShort.asie-nord": "C. Asia/Siberia",
   "regionShort.ameriques": "Americas",
   "regionShort.oceanie": "Oceania",
+  "display.borders": "Borders",
+  "display.borders.fast": "Fast mode (snapshots, whole world)",
+  "display.borders.precise": "Precise mode (Cliopatria, year by year)",
+  "map.bordersPrecise": "Precise borders: {year} (Cliopatria)",
+  "inspector.bordersClio": "outline valid from {from} to {to} (Cliopatria)",
+  "inspector.bordersClioSource": "Cliopatria — Seshat Global History Databank",
+  "legend.paleo": "Land exposed at the Last Glacial Maximum (approximation: shelves < 200 m)",
+  "legend.composites": "Composite entity (empire, alliance, suzerainty)",
+  "import.label": "Import borders (GeoJSON)",
+  "import.hint": "Recognised date fields: start_date / end_date, FromYear / ToYear… Nothing is uploaded: the file stays in your browser.",
+  "import.done": "{file}: {n} outline(s), {dated} dated.",
+  "import.error": "Import failed: {error}",
   "chrono.empty": "No events for the selected categories.",
   "chrono.count": "{n} event(s)"
 };

@@ -33,6 +33,10 @@ export interface ActorSpec {
   when?: [DateInput, DateInput][];
   /** Identifiant Wikidata de l'entité représentée. */
   qid?: string;
+  /** Identifiants Wikidata des entités (mode précis : rattachement prioritaire aux tracés Cliopatria). */
+  qids?: string[];
+  /** N'appliquer qu'en mode précis (entité absente du jeu de frontières rapide). */
+  preciseOnly?: boolean;
 }
 
 export interface PeriodSpec {
@@ -62,6 +66,8 @@ export interface EventSpec {
 export interface PathSpec {
   label: string;
   color: string;
+  /** "person" : trajet de vie ; "army" : mouvement de troupes (flèches, tête de colonne animée). */
+  kind?: "person" | "army" | "journey";
   /** Étapes datées d'un trajet (personnage, armée…). */
   steps: { date: DateInput; coords: [number, number]; label: string }[];
 }
@@ -113,5 +119,5 @@ export interface Scenario {
   periods: (PeriodSpec & { t0: number; t1: number })[];
   events: EventItem[];
   byIdx: Record<number, EventItem>;
-  paths: { label: string; color: string; steps: { t: number; coords: [number, number]; label: string }[] }[];
+  paths: { label: string; color: string; kind: "person" | "army" | "journey"; steps: { t: number; coords: [number, number]; label: string }[] }[];
 }

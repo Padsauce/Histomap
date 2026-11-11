@@ -54,6 +54,16 @@
           <label class="toggle"><input type="checkbox" id="opt-modern"> <span data-i18n="display.modern"></span></label>
           <label class="toggle"><input type="checkbox" id="opt-globe" checked> <span data-i18n="display.globe"></span></label>
           <label class="toggle"><input type="checkbox" id="opt-cvd"> <span data-i18n="display.cvd"></span></label>
+          <label class="field"><span data-i18n="display.borders"></span>
+            <select id="opt-borders">
+              <option value="fast" data-i18n="display.borders.fast"></option>
+              <option value="precise" data-i18n="display.borders.precise"></option>
+            </select>
+          </label>
+          <label class="field"><span data-i18n="import.label"></span>
+            <input type="file" id="opt-import" accept=".geojson,.json,application/geo+json,application/json">
+            <span id="user-status" class="muted small" data-i18n="import.hint"></span>
+          </label>
           <label class="field"><span data-i18n="display.basemap"></span>
             <select id="opt-basemap">
               <option value="voyager" data-i18n="display.basemap.voyager"></option>

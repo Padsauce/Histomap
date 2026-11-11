@@ -227,3 +227,6 @@ select { border: 1px solid var(--line); border-radius: 8px; background: var(--pa
 .mw-region .event-list .y { min-width: 6.5rem; }
 button.small { font-size: .82rem; padding: .2rem .4rem; align-self: flex-start; }
 #btn-lanes[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.swatch.outline { background: transparent; border: 2px dashed #374151; }
+.swatch.line.solid { border-top-style: solid; border-top-width: 4px; }
+#opt-import { font-size: .8rem; max-width: 100%; }

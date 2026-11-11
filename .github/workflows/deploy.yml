@@ -33,6 +33,14 @@ jobs:
       - run: npm test
       # Index mondial : reconstruit depuis Wikidata ; en cas d'échec, l'index du dépôt est conservé
       - run: npm run build:index
+      # Mode précis : Cliopatria (Seshat) téléchargé et préparé à chaque publication ;
+      # en cas d'échec, l'application reste disponible en mode rapide.
+      - name: Frontières précises (Cliopatria)
+        run: |
+          curl -sSL -o /tmp/clio.zip https://raw.githubusercontent.com/Seshat-Global-History-Databank/cliopatria/main/cliopatria.geojson.zip \
+            && unzip -o -q /tmp/clio.zip -d /tmp/clio \
+            && node --max-old-space-size=6144 tools/build-borders.mjs --clio "$(ls /tmp/clio/*.geojson | head -1)" --out public \
+            || echo "::warning::Mode précis indisponible (Cliopatria non préparé)"
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

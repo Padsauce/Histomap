@@ -1,7 +1,7 @@
 {
   "name": "histomap",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Atlas historique interactif : carte du monde, frise adaptative et données Wikidata en temps réel.",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:index": "node tools/build-index.mjs --out public/index"
+    "build:index": "node tools/build-index.mjs --out public/index",
+    "build:borders": "sh tools/build-borders.sh"
   },
   "dependencies": {
     "maplibre-gl": "5.6.0"
