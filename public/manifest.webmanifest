@@ -1,0 +1,14 @@
+{
+  "name": "Histomap — atlas historique",
+  "short_name": "Histomap",
+  "description": "Explorer l'histoire sur une carte du monde, au fil du temps.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f3ec",
+  "theme_color": "#2563eb",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

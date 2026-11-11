@@ -12,6 +12,8 @@ import { generate, fetchFacts } from "./core/generator";
 import { Timeline, type TimelineEvent, type TimelineLane } from "./ui/timeline";
 import * as World from "./core/worldindex";
 import * as Borders from "./core/borders";
+import { Morpher } from "./core/morph";
+import { Teacher, worldToEvent } from "./ui/teacher";
 import { CATEGORIES } from "./data/categories";
 import { SCENARIOS as CURATED } from "./data/scenarios";
 import type { Category, EventItem, Scenario, ScenarioSpec, ActorSpec } from "./core/types";
@@ -166,6 +168,9 @@ const state = {
   view: scenarios[0].bounds as [number, number],
   frame: null as Borders.BordersFrame | null,
   bordersMode: store.get<Borders.BordersMode>("bordersMode", "fast"),
+  dynamic: store.get("dynamicBorders", true),
+  morph: null as null | { key: string; m: Morpher; tA: number; tB: number; nextYear: number },
+  morphF: -1,
   labels: new Map<string, { name: string; pt: Pt; area: number; props: Record<string, any> }[]>(),
   decorated: null as FC | null,
   hiddenCats: new Set<string>(store.get<string[]>("hiddenCats", [])),
@@ -408,10 +413,10 @@ function refreshPaths(): void {
 // Carte
 // ---------------------------------------------------------------------------
 const cartoTiles = (layer: string) => ["a", "b", "c", "d"].map(s => `https://${s}.basemaps.cartocdn.com/rastertiles/${layer}/{z}/{x}/{y}.png`);
-const fillOpacity = (k: number): any => ["case",
+const fillOpacity = (k: number): any => ["*", ["coalesce", ["get", "_op"], 1], ["case",
   ["boolean", ["feature-state", "hover"], false], 0.75 * k,
   ["==", ["get", "_role"], "other"], 0.32 * k,
-  0.58 * k];
+  0.58 * k]];
 const emptyFC = (): FC => ({ type: "FeatureCollection", features: [] });
 const map = new maplibregl.Map({
   container: "map",
@@ -447,13 +452,13 @@ const map = new maplibregl.Map({
       { id: "paleo-land", type: "background", layout: { visibility: "none" }, paint: { "background-color": "#d8c9a3", "background-opacity": 0 } },
       { id: "paleo-sea", type: "fill", source: "paleo", layout: { visibility: "none" }, paint: { "fill-color": "#8fb5cf", "fill-opacity": 0 } },
       { id: "states-fill", type: "fill", source: "states", paint: { "fill-color": ["get", "_color"], "fill-opacity": ["interpolate", ["linear"], ["zoom"], 7, fillOpacity(1), 12, fillOpacity(0.45)] } },
-      { id: "states-line", type: "line", source: "states", paint: { "line-color": "#4b5563", "line-opacity": 0.45, "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.4, 8, 1.2] } },
+      { id: "states-line", type: "line", source: "states", paint: { "line-color": "#4b5563", "line-opacity": ["*", 0.45, ["coalesce", ["get", "_op"], 1]], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.4, 8, 1.2] } },
       {
         id: "states-key-line", type: "line", source: "states",
         filter: ["in", ["get", "_role"], ["literal", ["focus", "rival", "ally", "context"]]],
         paint: { "line-color": ["get", "_color"], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 1.2, 8, 3] }
       },
-      { id: "states-selected", type: "line", source: "states", filter: ["==", ["id"], -1], paint: { "line-color": "#111827", "line-width": 2.5, "line-dasharray": [2, 1] } },
+      { id: "states-selected", type: "line", source: "states", filter: ["==", ["get", "NAME"], "\u0000"], paint: { "line-color": "#111827", "line-width": 2.5, "line-dasharray": [2, 1] } },
       // Frontières importées par l'utilisateur (F-26)
       { id: "user-fill", type: "fill", source: "user", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.25 } },
       { id: "user-line", type: "line", source: "user", paint: { "line-color": "#b45309", "line-width": 2.5, "line-dasharray": [1, 1] } },
@@ -598,18 +603,61 @@ async function refreshStates(force = false): Promise<void> {
   if (seq !== loadSeq) return;
   $("loading").hidden = true;
   const sameShape = !force && state.frame?.key === frame.key && state.decorated;
+  const frameChanged = state.frame?.key !== frame.key;
   state.frame = frame;
   $("snapshot-badge").textContent = bordersBadge(frame);
+  if (frameChanged || force) (map.getSource("composites") as GeoJSONSource).setData(frame.composites);
+  // Frontières dynamiques : interpolation vers l'état connu suivant
+  if (state.dynamic) {
+    await ensureMorph(frame);
+    if (seq !== loadSeq) return;
+    if (state.morph) {
+      const rolesChanged = state.sig.decorated !== state.sig.actors;
+      state.sig.decorated = state.sig.actors;
+      applyMorph(force || frameChanged || rolesChanged);
+      if (frameChanged || force || rolesChanged) { refreshLabels(true); renderLegend(); if (state.selected?.kind === "state") reselectState(); }
+      Borders.prefetch(state.t + (state.view[1] - state.view[0]) * 0.05, state.bordersMode);
+      return;
+    }
+  } else state.morph = null;
   if (sameShape && state.sig.decorated === state.sig.actors) return; // mêmes tracés, mêmes rôles
   state.sig.decorated = state.sig.actors;
   state.decorated = decorate(frame.fc);
   (map.getSource("states") as GeoJSONSource).setData(state.decorated);
-  (map.getSource("composites") as GeoJSONSource).setData(frame.composites);
   refreshLabels(true);
   renderLegend();
   if (state.selected?.kind === "state") reselectState();
   Borders.prefetch(state.t + (state.view[1] - state.view[0]) * 0.05, state.bordersMode);
 }
+/** Prépare l'interpolation entre le cadre courant et l'état connu suivant (une fois par couple). */
+async function ensureMorph(frame: Borders.BordersFrame): Promise<void> {
+  if (state.morph && state.morph.key.startsWith(frame.key + "→")) return;
+  const pair = await Borders.nextFrame(frame, state.bordersMode).catch(() => null);
+  if (!pair || pair.next.key === frame.key) { state.morph = null; return; }
+  state.morph = { key: frame.key + "→" + pair.next.key, m: new Morpher(frame.fc, pair.next.fc), tA: pair.tA, tB: pair.tB, nextYear: pair.next.year };
+  state.morphF = -1;
+}
+let morphTimer = 0, morphLast = 0;
+/** Applique l'interpolation pour la date courante (limitée à ≈ 12 rafraîchissements par seconde). */
+function applyMorph(force = false): void {
+  const mo = state.morph;
+  if (!mo) return;
+  const f = Math.max(0, Math.min(1, (state.t - mo.tA) / Math.max(1e-9, mo.tB - mo.tA)));
+  if (!force && Math.abs(f - state.morphF) < 0.004) return;
+  const now = performance.now();
+  if (!force && now - morphLast < 80) {
+    if (!morphTimer) morphTimer = window.setTimeout(() => { morphTimer = 0; applyMorph(); }, 80);
+    return;
+  }
+  morphLast = now;
+  state.morphF = f;
+  setHover(null);
+  state.decorated = decorate(mo.m.at(f));
+  (map.getSource("states") as GeoJSONSource).setData(state.decorated);
+  const badge = state.frame ? bordersBadge(state.frame) : "";
+  $("snapshot-badge").textContent = f > 0.001 ? `${badge} → ${Time.fmtYearHist(mo.nextYear)} · ${t_("map.transition")}` : badge;
+}
+
 function refreshLabels(force: boolean): void {
   if (!state.frame) return;
   const sig = state.frame.key + ":" + Time.histYear(state.t) + ":" + state.sig.actors;
@@ -710,7 +758,7 @@ function setTime(t: number, { fromTimeline = false, follow = false } = {}): void
   const actorsChanged = actorsSig !== state.sig.actors;
   state.sig.actors = actorsSig;
   if (frameStale(t) || actorsChanged) refreshStates();
-  else refreshLabels(false);
+  else { refreshLabels(false); if (state.dynamic) applyMorph(); }
   updatePaleo();
   updateUserLayer();
   refreshEvents();
@@ -827,11 +875,12 @@ function renderChronology(): void {
   const evs = state.sc.events.filter(e => !state.hiddenCats.has(e.category));
   $("chrono-count").textContent = evs.length ? t_("chrono.count", { n: evs.length }) : t_("chrono.empty");
   $("chrono-list").innerHTML = evs.map(e => `
-    <li><button data-ev="${e.idx}" style="--c:${e.color}">
+    <li class="chrono-item"><input type="checkbox" class="prep-only" data-prep="${e.idx}" ${teacher?.has(eventItemId(e)) ? "checked" : ""} aria-label="${esc(t_("prep.add"))}"><button data-ev="${e.idx}" style="--c:${e.color}">
       <span class="ico" aria-hidden="true">${e.icon}</span>
       <span class="txt"><span class="d">${esc(e.dateLabel)}</span><span class="ttl">${esc(e.title)}</span></span>
     </button></li>`).join("");
   $("chrono-list").querySelectorAll<HTMLElement>("[data-ev]").forEach(b => b.onclick = () => focusEvent(+b.dataset.ev!));
+  $("chrono-list").querySelectorAll<HTMLInputElement>("[data-prep]").forEach(c => c.onchange = () => teacher.toggle(eventBasketItem(state.sc.byIdx[+c.dataset.prep!])));
   state.sig.chrono = "";
   updateChronoHighlight();
 }
@@ -845,9 +894,12 @@ function updateChronoHighlight(): void {
 
 function fillScenarioSelect(): void {
   const opt = (s: Scenario) => `<option value="${esc(s.id)}">${esc(s.raw.title)}${s.raw.subtitle ? ` (${esc(s.raw.subtitle)})` : ""}</option>`;
-  const cur = scenarios.filter(s => s.raw.kind !== "generated"), gen = scenarios.filter(s => s.raw.kind === "generated");
+  const isPkg = (s: Scenario) => s.id.startsWith("pkg:");
+  const cur = scenarios.filter(s => s.raw.kind !== "generated" && !isPkg(s)), gen = scenarios.filter(s => s.raw.kind === "generated");
+  const pkgs = scenarios.filter(isPkg);
   $("scenario-select").innerHTML = `<optgroup label="${esc(t_("group.curated"))}">${cur.map(opt).join("")}</optgroup>` +
-    (gen.length ? `<optgroup label="${esc(t_("group.generated"))}">${gen.map(opt).join("")}</optgroup>` : "");
+    (gen.length ? `<optgroup label="${esc(t_("group.generated"))}">${gen.map(opt).join("")}</optgroup>` : "") +
+    (pkgs.length ? `<optgroup label="${esc(t_("group.packages"))}">${pkgs.map(opt).join("")}</optgroup>` : "");
   $<HTMLSelectElement>("scenario-select").value = state.sc.id;
 }
 
@@ -856,6 +908,7 @@ function setScenario(id: string, { t, view, fly = true }: { t?: number; view?: [
   state.sc = scenarios.find(s => s.id === id) || scenarios[0];
   $<HTMLSelectElement>("scenario-select").value = state.sc.id;
   state.frame = null;
+  state.morph = null;
   state.sig = { actors: "", labels: "", events: "", chrono: "", paths: "", decorated: "" };
   popup.remove();
   clearSelection();
@@ -873,6 +926,7 @@ function setScenario(id: string, { t, view, fly = true }: { t?: number; view?: [
     else map.flyTo({ center: r.view.center, zoom: r.view.zoom, duration: 1600 });
   }
   setTime(t ?? state.sc.startT);
+  teacher?.onScenario(state.sc);
 }
 
 /** Ajoute (ou remplace) un sujet généré et le mémorise localement. */
@@ -1015,6 +1069,14 @@ function showGenError(msg: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Mode Préparation (phase 5) : éléments du panier
+// ---------------------------------------------------------------------------
+const eventItemId = (e: EventItem) => "ev:" + (e.qid || e.title);
+function eventBasketItem(e: EventItem) {
+  return { id: eventItemId(e), kind: "event" as const, title: e.title, t: e.t0, dateLabel: e.dateLabel, coords: e.coords as Pt, event: state.sc.raw.events[e.idx], wiki: e.wiki };
+}
+
+// ---------------------------------------------------------------------------
 // Inspecteur à tiroirs (F-04)
 // ---------------------------------------------------------------------------
 const drawerState = store.get<Record<string, boolean>>("drawers", { facts: true, summary: true, chronology: true, actors: false, sources: false, article: false });
@@ -1080,7 +1142,7 @@ function clearSelection(): void {
   state.selected = null;
   state.inspectToken++;
   $("inspector").classList.remove("open");
-  if (map.getLayer("states-selected")) map.setFilter("states-selected", ["==", ["id"], -1]);
+  if (map.getLayer("states-selected")) map.setFilter("states-selected", ["==", ["get", "NAME"], "\u0000"]);
   renderMeanwhile();
 }
 
@@ -1090,7 +1152,7 @@ function inspectState(feature: { id?: string | number; properties: Record<string
   const token = ++state.inspectToken;
   const year = Time.histYear(state.t);
   state.selected = { kind: "state", name: p.NAME, id: fid };
-  map.setFilter("states-selected", ["==", ["id"], fid]);
+  map.setFilter("states-selected", ["==", ["get", "NAME"], p.NAME]);
   const clio = !!p.QID || p.FROM !== undefined;
   const shown = stateLabel(p, year);
   const r = roleOf(p);
@@ -1148,6 +1210,7 @@ function inspectState(feature: { id?: string | number; properties: Record<string
       ${actorQid ? `<dt>${esc(t_("inspector.dataSource"))}</dt><dd><a href="${wdUrl(actorQid)}" target="_blank" rel="noopener">${esc(t_("inspector.wikidataSource", { qid: actorQid }))}</a></dd>` : ""}
     </dl>`));
   body.appendChild(articleDrawer(articleRef, token));
+  body.querySelector(".brief .actions")!.appendChild(teacher.button({ id: "st:" + p.NAME + "@" + year, kind: "state", title: shown, t: state.t, dateLabel: Time.format(state.t, Time.levelForSpan(state.view[1] - state.view[0])), wiki: undefined }));
   $("btn-fit").onclick = () => {
     const b = bboxOf(geom);
     map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, duration: 1200, maxZoom: 9 });
@@ -1162,7 +1225,7 @@ function reselectState(): void {
   const f = state.decorated!.features.find(x => x.properties?.NAME === name);
   if (f) inspectState({ id: f.id, properties: f.properties! });
   else {
-    map.setFilter("states-selected", ["==", ["id"], -1]);
+    map.setFilter("states-selected", ["==", ["get", "NAME"], "\u0000"]);
     const note = document.createElement("p");
     note.className = "muted small";
     note.textContent = t_("inspector.noLongerExists", { name, year: Time.fmtYearHist(state.frame!.year) });
@@ -1175,7 +1238,7 @@ function inspectEvent(idx: number): void {
   const c = CAT[e.category];
   const token = ++state.inspectToken;
   state.selected = { kind: "event", idx };
-  map.setFilter("states-selected", ["==", ["id"], -1]);
+  map.setFilter("states-selected", ["==", ["get", "NAME"], "\u0000"]);
   const body = $("inspector-body");
   body.innerHTML = `
     <div class="brief">
@@ -1206,6 +1269,7 @@ function inspectEvent(idx: number): void {
       <dt>${esc(t_("inspector.summary"))}</dt><dd>Wikipédia (CC BY-SA)</dd>
     </dl>${e.qid ? `<p class="small"><a href="${wdUrl(e.qid)}" target="_blank" rel="noopener">✎ ${esc(t_("inspector.fixOnWikidata"))}</a></p>` : ""}`));
   if (e.wiki) body.appendChild(articleDrawer(() => Promise.resolve({ title: e.wiki!, lang: "fr" }), token));
+  body.querySelector(".brief .actions")!.appendChild(teacher.button(eventBasketItem(e)));
   $("btn-zoom-ev").onclick = () => map.flyTo({ center: e.coords, zoom: 12, duration: 1800 });
   $("btn-goto-ev").onclick = () => { stopPlay(); setTime(e.t0); };
   bindEventButtons(body);
@@ -1340,7 +1404,7 @@ function renderMeanwhile(): void {
 async function inspectWorld(it: World.WorldItem, fly: boolean): Promise<void> {
   const token = ++state.inspectToken;
   state.selected = { kind: "world", qid: it.qid };
-  map.setFilter("states-selected", ["==", ["id"], -1]);
+  map.setFilter("states-selected", ["==", ["get", "NAME"], "\u0000"]);
   if (fly) map.flyTo({ center: it.coords, zoom: Math.max(map.getZoom(), 5), duration: 1200 });
   await World.loadLabels([it.qid], I18n.getLang());
   if (token !== state.inspectToken) return;
@@ -1372,6 +1436,10 @@ async function inspectWorld(it: World.WorldItem, fly: boolean): Promise<void> {
       ${built ? `<dt>Index</dt><dd>${esc(t_("world.source", { date: new Date(built).toLocaleDateString(I18n.getLang()) }))}</dd>` : ""}
     </dl><p class="small"><a href="${wdUrl(it.qid)}" target="_blank" rel="noopener">✎ ${esc(t_("inspector.fixOnWikidata"))}</a></p>`));
   if (info.frwiki) body.appendChild(articleDrawer(() => Promise.resolve({ title: info.frwiki!, lang: "fr" }), token));
+  body.querySelector(".brief .actions")!.appendChild(teacher.button({
+    id: "ev:" + it.qid, kind: "world", title: worldTitle(it), t: it.t0, dateLabel: worldDate(it), coords: it.coords, wiki: info.frwiki,
+    event: worldToEvent({ ...it, title: worldTitle(it), description: info.description, wiki: info.frwiki })
+  }));
   $("btn-mw-back").onclick = () => clearSelection();
   $("btn-zoom-w").onclick = () => map.flyTo({ center: it.coords, zoom: it.placePrecision === "exact" ? 11 : 6, duration: 1600 });
   $("btn-goto-w").onclick = () => {
@@ -1455,6 +1523,7 @@ function setHover(id: number | null): void {
   if (id !== null) map.setFeatureState({ source: "states", id }, { hover: true });
 }
 map.on("click", async e => {
+  if (teacher.mapClick(e.lngLat)) return;
   const box: [Pt, Pt] = [[e.point.x - 5, e.point.y - 5], [e.point.x + 5, e.point.y + 5]];
   const cl = map.queryRenderedFeatures(box, { layers: ["clusters"] })[0];
   if (cl) {
@@ -1494,6 +1563,7 @@ $("btn-tzoom-out").onclick = () => timeline.zoom(2);
 $("btn-tfit").onclick = () => timeline.fit();
 $("btn-lanes").onclick = () => { state.lanesOn = !state.lanesOn; store.set("lanes", state.lanesOn); refreshLanes(); };
 document.addEventListener("keydown", e => {
+  if (teacher.key(e)) return;
   const target = e.target as HTMLElement;
   if (["INPUT", "SELECT", "TEXTAREA", "BUTTON", "SUMMARY"].includes(target.tagName) || target === timeline.canvas) {
     if (e.key === "Escape" && target.id !== "search") clearSelection();
@@ -1531,11 +1601,19 @@ $<HTMLInputElement>("opt-import").onchange = e => {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (f) importBorders(f);
 };
+$<HTMLInputElement>("opt-dynamic").checked = state.dynamic;
+$<HTMLInputElement>("opt-dynamic").onchange = e => {
+  state.dynamic = (e.target as HTMLInputElement).checked;
+  store.set("dynamicBorders", state.dynamic);
+  state.morph = null;
+  refreshStates(true);
+};
 $<HTMLSelectElement>("opt-borders").value = state.bordersMode;
 $<HTMLSelectElement>("opt-borders").onchange = e => {
   state.bordersMode = (e.target as HTMLSelectElement).value as Borders.BordersMode;
   store.set("bordersMode", state.bordersMode);
   state.frame = null;
+  state.morph = null;
   state.actorNames.clear();
   refreshStates(true);
   writeHash();
@@ -1555,7 +1633,7 @@ $<HTMLSelectElement>("opt-lang").onchange = e => {
 $("btn-toggle-left").onclick = () => $("left-panel").classList.toggle("open");
 $("btn-close-inspector").onclick = () => $("inspector").classList.remove("open");
 // Onglets du panneau gauche
-const tabs: [string, string][] = [["tab-subject", "pane-subject"], ["tab-chrono", "pane-chrono"]];
+const tabs: [string, string][] = [["tab-subject", "pane-subject"], ["tab-chrono", "pane-chrono"], ["tab-prep", "pane-prep"]];
 tabs.forEach(([tabId]) => $(tabId).onclick = () => tabs.forEach(([tid, pid]) => {
   const on = tid === tabId;
   $(tid).setAttribute("aria-selected", String(on));
@@ -1607,6 +1685,41 @@ window.addEventListener("hashchange", () => {
   if (h.s === state.sc.id && Number.isFinite(h.t) && Math.abs(h.t! - state.t) < 1e-6) return; // notre propre écriture
   openFromHash(true);
 });
+
+// ---------------------------------------------------------------------------
+// Mode Préparation, paquets hors ligne, visite guidée (phase 5)
+// ---------------------------------------------------------------------------
+const teacher: Teacher = new Teacher({
+  map, t: t_, lang: I18n.getLang,
+  current: () => ({ sc: state.sc, t: state.t, view: state.view, bordersMode: state.bordersMode }),
+  setScenario: (id, o) => setScenario(id, o),
+  setTime: t => { stopPlay(); setTime(t, { follow: true }); },
+  setBordersMode: m => {
+    if (state.bordersMode === m) return;
+    state.bordersMode = m;
+    $<HTMLSelectElement>("opt-borders").value = m;
+    state.frame = null; state.morph = null; state.actorNames.clear();
+    refreshStates(true);
+  },
+  inspectEvent: idx => inspectEvent(idx),
+  inspectStateByName: name => {
+    const f = state.decorated?.features.find(x => x.properties?.NAME === name);
+    if (f) inspectState({ id: f.id, properties: f.properties! });
+  },
+  addScenario: spec => {
+    const sc = normalize(spec);
+    const i = scenarios.findIndex(s => s.id === sc.id);
+    if (i >= 0) scenarios.splice(i, 1);
+    scenarios.push(sc);
+    fillScenarioSelect();
+  },
+  refresh: () => renderChronology()
+});
+
+// Application installable et utilisable hors ligne (service worker, en production)
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => { /* indisponible : mode en ligne seul */ }));
+}
 
 // ---------------------------------------------------------------------------
 // Démarrage

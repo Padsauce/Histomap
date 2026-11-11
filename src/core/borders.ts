@@ -61,13 +61,46 @@ export function clioManifest(): Promise<ClioManifest | null> {
 }
 export const CLIO_RANGE: [number, number] = [-3400, 2024];
 
+// Frontières d'un paquet hors ligne (prioritaires sur le réseau pour leur période)
+let pkgClio: { from: number; to: number; fc: FC } | null = null;
+export function installPackage(b: { hb: { year: number; fc: FC }[]; clio?: { from: number; to: number; fc: FC } }): void {
+  for (const x of b.hb) hbCache.set(x.year, x.fc);
+  if (b.clio) { pkgClio = b.clio; clioFrames.clear(); }
+}
+
+/** Tracés Cliopatria valables pendant [fromY, toY] (toutes tranches confondues). */
+export async function clioRecords(fromY: number, toY: number): Promise<FC | null> {
+  const m = await clioManifest();
+  if (!m) return pkgClio && pkgClio.from <= fromY && pkgClio.to >= toY ? pkgClio.fc : null;
+  const seen = new Set<string>();
+  const features: GeoJSON.Feature[] = [];
+  for (const b of m.buckets.filter(x => x.to >= fromY && x.from <= toY)) {
+    let fc = clioBuckets.get(b.file);
+    if (!fc) { fc = await getJSON<FC>(clioBase() + b.file, { persist: true }); clioBuckets.set(b.file, fc); }
+    for (const f of fc.features) {
+      const p = f.properties!;
+      const id = `${p.NAME}|${p.FROM}|${p.TO}`;
+      if (p.TO < fromY || p.FROM > toY || seen.has(id)) continue;
+      seen.add(id);
+      features.push(f);
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
 async function clioFrame(Y: number): Promise<BordersFrame | null> {
   if (clioFrames.has(Y)) return clioFrames.get(Y)!;
-  const m = await clioManifest();
-  const b = m?.buckets.find(x => Y >= x.from && Y <= x.to);
-  if (!b) return null;
-  let fc = clioBuckets.get(b.file);
-  if (!fc) { fc = await getJSON<FC>(clioBase() + b.file, { persist: true }); clioBuckets.set(b.file, fc); }
+  let fc: FC | undefined, fileKey: string;
+  if (pkgClio && Y >= pkgClio.from && Y <= pkgClio.to) { fc = pkgClio.fc; fileKey = "pkg"; }
+  else {
+    const m = await clioManifest();
+    const b = m?.buckets.find(x => Y >= x.from && Y <= x.to);
+    if (!b) return null;
+    fileKey = b.file;
+    fc = clioBuckets.get(b.file);
+    if (!fc) { fc = await getJSON<FC>(clioBase() + b.file, { persist: true }); clioBuckets.set(b.file, fc); }
+  }
+  const b = { file: fileKey };
   const fills: GeoJSON.Feature[] = [], comps: GeoJSON.Feature[] = [];
   const ids: string[] = [];
   fc.features.forEach((f, i) => {
@@ -116,4 +149,30 @@ export function prefetch(t: number, mode: BordersMode): void {
     const next = SNAPSHOTS[i + 1];
     if (next && !hbCache.has(next.year)) getJSON<FC>(BASEMAPS_URL(next.year), { persist: true }).then(fc => hbCache.set(next.year, fc)).catch(() => {});
   }
+}
+
+/**
+ * État connu suivant (pour les frontières dynamiques) : prochain instantané en mode rapide,
+ * prochaine année où un tracé change en mode précis. Renvoie aussi les dates des deux états.
+ */
+export async function nextFrame(frame: BordersFrame, mode: BordersMode): Promise<{ next: BordersFrame; tA: number; tB: number } | null> {
+  if (frame.source === "hb") {
+    const i = SNAPSHOTS.findIndex(s => s.year === frame.year);
+    const nx = SNAPSHOTS[i + 1];
+    if (i < 0 || !nx) return null;
+    const next = await fastFrame(nx.t);
+    return { next, tA: SNAPSHOTS[i].t, tB: nx.t };
+  }
+  if (mode !== "precise") return null;
+  let start = -Infinity, change = Infinity;
+  for (const f of [...frame.fc.features, ...frame.composites.features]) {
+    const p = f.properties!;
+    if (p.FROM > start) start = p.FROM;
+    if (p.TO < change) change = p.TO;
+  }
+  const nextY = change + 1;
+  if (!Number.isFinite(nextY) || nextY > CLIO_RANGE[1]) return null;
+  const next = await clioFrame(nextY);
+  if (!next) return null;
+  return { next, tA: fromHistYear(Math.max(start, CLIO_RANGE[0])), tB: fromHistYear(nextY) };
 }

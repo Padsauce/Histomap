@@ -107,4 +107,6 @@ export function get<T = unknown>(url: string, opts: GetOptions = {}): Promise<T>
 
 export const getJSON = <T = unknown>(url: string, opts: GetOptions = {}) => get<T>(url, { ...opts, as: "json" });
 export const getText = (url: string, opts: GetOptions = {}) => get<string>(url, { ...opts, as: "text" });
+/** Place une réponse en cache (paquets hors ligne : textes servis sans réseau). */
+export const prime = (url: string, data: unknown) => { memory.set(url, data); };
 export const onStatus = (fn: (s: NetStatus) => void) => { listeners.add(fn); };

@@ -4,7 +4,7 @@
 > (`F-xx`) pour être citée dans les tickets, commits et revues. Priorités : **M** (indispensable),
 > **S** (souhaitable), **C** (confort), **L** (plus tard).
 >
-> État : v0.6 — phases 1 à 4 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
+> État : v0.7 — phases 1 à 5 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
 > branche `claude/cultural-education-app-224852`.
 
 ---
@@ -176,7 +176,7 @@ Fonctionnalités :
   (nom, date de début, date de fin, entité).
 - **F-27 (S)** Territoires **contestés** ou à souveraineté partagée (hachures), vassalité
   (teinte du suzerain), zones d'influence (contour seul).
-- **F-28 (S)** Transitions animées entre deux états de frontières.
+- **F-28 (S)** Transitions animées entre deux états de frontières. ✅ (phase 5)
 - **F-29 (L)** Éditeur de frontières (dessin, découpe, attribution de dates) pour produire ses
   propres données en mode précis.
 - **F-30 (M)** Conversion des gros jeux en tuiles vectorielles (PMTiles) hébergées statiquement :
@@ -582,10 +582,25 @@ avec positions d'unités : nécessite des données éditorialisées fiables).
 sur GitHub ; la publication associée (Scientific Data, 2025) et Zenodo (enregistrement 13363121)
 doivent être consultés.
 
-### Phase 5 — Professeurs et hors ligne
-F-80 à F-86 · fond de carte auto-hébergé · application web progressive.
-**Critère de sortie** : un professeur prépare un paquet en ligne en moins de 15 minutes et l'utilise
-en classe sans réseau.
+### Phase 5 — Professeurs et hors ligne ✅ (livrée le 11/11/2026)
+Livré : F-80 (mode « Préparer » : bouton « ＋ Ajouter au sujet » dans l'inspecteur, cases dans la
+chronologie, vue actuelle) · F-81 (panier réorganisable, note du professeur par étape, mémorisé par
+sujet) · F-82 (paquet `.histomap` compressé : sujet, étapes, notes, résumés et images Wikipédia,
+frontières de la période limitées à l'emprise du sujet — 0,4 Mo pour une séance sur la guerre de Cent
+Ans en mode précis) · F-83 (ouverture d'un paquet sans réseau ; application installable, service
+worker qui garde l'application, l'index mondial et la paléogéographie) · F-84 (visite guidée en plein
+écran, ← → / Page précédente-suivante, Échap) · F-85 (notes posées sur la carte) · F-86 (fiche élève
+imprimable : carte, chronologie, notes, questions).
+
+En complément (demande du 11/11/2026) — **F-28 frontières dynamiques** : entre deux états connus
+(instantanés en mode rapide, changements de tracé en mode précis), les contours de chaque État glissent
+progressivement (rééchantillonnage, alignement, interpolation adoucie) ; les États qui naissent ou
+disparaissent apparaissent en fondu. Le badge indique « transition interpolée » : c'est une
+visualisation, les frontières réelles changent souvent d'un coup. Désactivable dans Affichage.
+
+Limites : le fond de carte n'est pas inclus dans les paquets (conditions d'usage des fournisseurs de
+tuiles) — hors ligne, la carte montre les États sur fond uni ; les articles Wikipédia complets ne sont
+pas inclus (seulement les résumés) ; les paquets ouverts ne sont gardés que pendant la session.
 
 ### Phase 6 — Anglais puis autres langues
 Traduction de l'interface et des sujets éditorialisés, F-93, F-94.
