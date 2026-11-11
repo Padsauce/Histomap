@@ -1,4 +1,5 @@
-# Construit l'application et la publie sur GitHub Pages à chaque push sur la branche principale.
+# Construit l'application et la publie sur GitHub Pages à chaque push sur la branche principale
+# et chaque semaine (index mondial rafraîchi).
 # Prérequis (une seule fois) : Settings → Pages → Build and deployment → Source : « GitHub Actions ».
 name: Déploiement GitHub Pages
 
@@ -6,6 +7,9 @@ on:
   push:
     branches: ["claude/cultural-education-app-224852", "main"]
   workflow_dispatch:
+  # Reconstruction hebdomadaire de l'index mondial (lundi 04:17 UTC)
+  schedule:
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -27,6 +31,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Index mondial : reconstruit depuis Wikidata ; en cas d'échec, l'index du dépôt est conservé
+      - run: npm run build:index
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

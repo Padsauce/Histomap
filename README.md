@@ -11,6 +11,9 @@ s'adapte au sujet, de 100 000 ans à l'heure.
 - La **frise** se zoome comme une carte : molette, pincement, glisser, clic ; ses graduations s'adaptent.
 - L'**inspecteur** (à droite) s'organise en tiroirs : faits clés, résumé Wikipédia, chronologie liée,
   acteurs, sources, article complet.
+- **Pendant ce temps** : l'inspecteur montre, région par région, ce qui se passe ailleurs dans le
+  monde au même moment ; la couche « 🌍 Monde » l'affiche sur la carte et le bouton ☷ ajoute des
+  frises parallèles par région sous la frise principale.
 - L'onglet **Chronologie** offre une vue liste de tous les événements (navigation au clavier, lecteurs d'écran).
 - Le lien de la page (`#s=…&t=…&v=…&f=…`) conserve le sujet, la date, l'échelle et les filtres.
 
@@ -48,6 +51,7 @@ npm install
 npm run dev        # serveur de développement (http://localhost:5173)
 npm test           # tests unitaires (Vitest)
 npm run build      # vérification des types + build de production dans dist/
+npm run build:index  # reconstruit l'index mondial (public/index) depuis Wikidata (≈ 30 s)
 ```
 
 ## Structure
@@ -61,6 +65,9 @@ npm run build      # vérification des types + build de production dans dist/
 | `src/core/time.ts` | Modèle temporel (années décimales, précisions, calendrier, formats, graduations) |
 | `src/core/net.ts` | Accès réseau : file d'attente, cache mémoire et IndexedDB, mode dégradé, réessais |
 | `src/core/wiki.ts` | Résumés et articles Wikipédia |
+| `src/core/worldindex.ts` | Index mondial : chargement par tranches, régions, libellés |
+| `tools/build-index.mjs` | Construction de l'index mondial (QLever, repli Wikidata) |
+| `public/index/` | Index mondial (fichiers statiques) |
 | `src/core/types.ts` | Types du modèle de données |
 | `src/ui/timeline.ts` | Frise zoomable (canvas) |
 | `src/i18n/` | Textes d'interface (français, anglais) |

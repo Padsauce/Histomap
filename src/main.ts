@@ -9,7 +9,8 @@ import * as Net from "./core/net";
 import * as Wiki from "./core/wiki";
 import { searchEntities, wdUrl, type SearchResult } from "./core/wikidata";
 import { generate, fetchFacts } from "./core/generator";
-import { Timeline } from "./ui/timeline";
+import { Timeline, type TimelineEvent, type TimelineLane } from "./ui/timeline";
+import * as World from "./core/worldindex";
 import { CATEGORIES } from "./data/categories";
 import { SCENARIOS as CURATED } from "./data/scenarios";
 import type { Category, EventItem, Scenario, ScenarioSpec, ActorSpec } from "./core/types";
@@ -184,7 +185,13 @@ const state = {
   showStates: true,
   cvd: store.get("cvd", false),
   playing: false,
-  selected: null as null | { kind: "state"; name: string; id: number } | { kind: "event"; idx: number },
+  selected: null as null | { kind: "state"; name: string; id: number } | { kind: "event"; idx: number } | { kind: "world"; qid: string },
+  showWorld: store.get("showWorld", true),
+  lanesOn: store.get("lanes", false),
+  worldAll: [] as World.WorldItem[],     // éléments de l'index mondial dans la fenêtre courante
+  worldItems: [] as World.WorldItem[],   // sélection affichée (plafonnée par région)
+  laneItems: [] as World.WorldItem[],
+  worldSig: "",
   hoverId: null as number | null,
   inspectToken: 0,
   sig: { actors: "", labels: "", events: "", chrono: "", paths: "" },
@@ -325,6 +332,7 @@ function refreshEvents(force = false): void {
   updateFilterCounts(list);
   updateChronoHighlight();
   refreshPaths();
+  scheduleWorld();
 }
 
 /** Trajets (F-32) : segments parcourus jusqu'à la date courante. */
@@ -369,6 +377,7 @@ const map = new maplibregl.Map({
       labels: { type: "geojson", data: emptyFC() },
       paths: { type: "geojson", data: emptyFC() },
       // Les textes ont leurs propres sources : si la police ne se charge pas, seuls les textes manquent.
+      world: { type: "geojson", data: emptyFC() },
       events: { type: "geojson", data: emptyFC(), cluster: true, clusterMaxZoom: 7, clusterRadius: 34, attribution: "Événements : Wikidata (CC0) / Histomap" },
       "events-text": { type: "geojson", data: emptyFC() },
       "clusters-text": { type: "geojson", data: emptyFC(), cluster: true, clusterMaxZoom: 7, clusterRadius: 34 }
@@ -405,6 +414,15 @@ const map = new maplibregl.Map({
         paint: {
           "circle-radius": ["case", ["==", ["get", "last"], 1], 7, 4], "circle-color": ["get", "color"],
           "circle-stroke-color": "#fff", "circle-stroke-width": 2
+        }
+      },
+      {
+        // Couche « Monde » (F-50) : ce qui se passe ailleurs au même moment
+        id: "world-dots", type: "circle", source: "world",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["+", 2, ["get", "w"]], 6, ["+", 4, ["*", 2, ["get", "w"]]]],
+          "circle-color": ["get", "color"], "circle-opacity": 0.7,
+          "circle-stroke-color": "#ffffff", "circle-stroke-width": 0.8, "circle-stroke-opacity": 0.8
         }
       },
       {
@@ -499,8 +517,9 @@ function refreshLabels(force: boolean): void {
 // ---------------------------------------------------------------------------
 const timeline = new Timeline($("timeline"), {
   onChange: t => { stopPlay(); setTime(t, { fromTimeline: true }); },
-  onView: v => { state.view = v; updateDateLabel(); refreshEvents(); writeHash(); },
-  onSelectEvent: e => focusEvent(e.idx)
+  onView: v => { state.view = v; updateDateLabel(); refreshEvents(); scheduleLanes(); writeHash(); },
+  onSelectEvent: e => focusEvent(e.idx),
+  onSelectLaneItem: (_lane, e) => { const it = state.laneItems[e.idx]; if (it) inspectWorld(it, true); }
 });
 
 function setTime(t: number, { fromTimeline = false, follow = false } = {}): void {
@@ -553,9 +572,12 @@ const stepSize = () => (timeline.minorUnit || timeline.majorUnit || { years: 1 }
 // Filtres par catégorie (F-40, F-41)
 // ---------------------------------------------------------------------------
 function renderFilters(): void {
-  const present = new Set(state.sc.events.map(e => e.category));
+  const present = new Set<string>(state.sc.events.map(e => e.category));
+  if (state.showWorld) CATEGORIES.forEach(c => c.id !== "migration" && present.add(c.id));
   const chips = [`<button class="chip-btn" data-cat="__states" aria-pressed="${state.showStates}" title="${esc(t_("filters.states"))}">
-    <span class="ico" aria-hidden="true">🏛️</span><span class="lbl">${esc(t_("filters.states"))}</span></button>`];
+    <span class="ico" aria-hidden="true">🏛️</span><span class="lbl">${esc(t_("filters.states"))}</span></button>`,
+  `<button class="chip-btn" data-cat="__world" aria-pressed="${state.showWorld}" title="${esc(t_("world.title"))}">
+    <span class="ico" aria-hidden="true">🌍</span><span class="lbl">${esc(t_("world.toggle"))}</span></button>`];
   for (const c of CATEGORIES.filter(c => present.has(c.id))) {
     chips.push(`<button class="chip-btn" data-cat="${c.id}" aria-pressed="${!state.hiddenCats.has(c.id)}" style="--c:${c.color}" title="${esc(catLabel(c))}">
       <span class="ico" aria-hidden="true">${c.icon}</span><span class="lbl">${esc(catLabel(c))}</span><span class="count" data-count="${c.id}"></span></button>`);
@@ -564,7 +586,11 @@ function renderFilters(): void {
   $("filters").querySelectorAll<HTMLElement>("[data-cat]").forEach(btn => btn.onclick = () => toggleCategory(btn.dataset.cat!));
 }
 function toggleCategory(id: string): void {
-  if (id === "__states") {
+  if (id === "__world") {
+    state.showWorld = !state.showWorld;
+    store.set("showWorld", state.showWorld);
+    state.worldSig = "";
+  } else if (id === "__states") {
     state.showStates = !state.showStates;
     ["states-fill", "states-line", "states-key-line", "states-selected", "state-labels"].forEach(l =>
       map.setLayoutProperty(l, "visibility", state.showStates && (l !== "state-labels" || $<HTMLInputElement>("opt-labels").checked) ? "visible" : "none"));
@@ -654,6 +680,8 @@ function setScenario(id: string, { t, view, fly = true }: { t?: number; view?: [
   renderFilters();
   renderChronology();
   timeline.setData({ bounds: state.sc.bounds, periods: state.sc.periods, events: state.sc.events });
+  state.worldSig = "";
+  scheduleLanes();
   timeline.setHiddenCategories(state.hiddenCats);
   if (view) timeline.setView(view[0], view[1]); else timeline.fit();
   const r = state.sc.raw;
@@ -870,7 +898,7 @@ function clearSelection(): void {
   state.inspectToken++;
   $("inspector").classList.remove("open");
   if (map.getLayer("states-selected")) map.setFilter("states-selected", ["==", ["id"], -1]);
-  $("inspector-body").innerHTML = `<p class="muted">${esc(t_("inspector.empty"))}</p>`;
+  renderMeanwhile();
 }
 
 function inspectState(feature: { id?: string | number; properties: Record<string, any> }): void {
@@ -996,14 +1024,199 @@ function focusEvent(idx: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Synchronie mondiale (F-50 à F-53, F-102) : index mondial léger
+// ---------------------------------------------------------------------------
+const WORLD_PER_REGION = 30;
+const KIND_BUILD = new Set(["culture", "religion"]);
+function worldTitle(it: World.WorldItem): string {
+  const label = World.labelOf(it.qid)?.label || "…";
+  if (it.kind === 1) {
+    // Élision française : « Naissance d'Aristote »
+    const de = I18n.getLang() === "fr" ? (/^[aeiouyhàâäéèêëîïôöûüœæ]/i.test(label) ? "d'" : "de ") : "";
+    return t_("world.kind.1", { label, de });
+  }
+  if (it.kind === 2) return t_(KIND_BUILD.has(it.category) ? "world.kind.2.build" : "world.kind.2", { label });
+  if (it.kind === 3) return t_("world.kind.3", { label });
+  return label;
+}
+const worldDate = (it: World.WorldItem) => Time.format(it.t0, PRECISION_LEVEL[it.precision] || "year");
+/**
+ * Fenêtre « au même moment » : proportionnelle à l'échelle de la frise, élargie (jusqu'à ×4)
+ * tant qu'elle contient trop peu d'éléments pour comparer les régions.
+ */
+let worldWin: [number, number] = [0, 0];
+const worldWindow = (): [number, number] => worldWin;
+async function computeWorldWindow(): Promise<World.WorldItem[]> {
+  const base = Math.max((state.view[1] - state.view[0]) * 0.02, 2 / 365.25);
+  const own = new Set(state.sc.events.map(e => e.qid).filter(Boolean));
+  let all: World.WorldItem[] = [];
+  for (const k of [1, 2, 4]) {
+    const w = base * k;
+    worldWin = [state.t - w, state.t + w];
+    await World.ensure(worldWin[0], worldWin[1]);
+    all = World.query(worldWin[0], worldWin[1], it => !own.has(it.qid));
+    if (all.length >= 40) break;
+  }
+  return all;
+}
+let worldTimer = 0;
+function scheduleWorld(): void {
+  if (worldTimer) return;
+  worldTimer = window.setTimeout(() => { worldTimer = 0; refreshWorld(); }, 200);
+}
+async function refreshWorld(): Promise<void> {
+  const all = await computeWorldWindow();
+  // Normalisation par région : les plus notables de chaque région, pour ne pas laisser l'Europe tout couvrir
+  const per = new Map<string, number>();
+  const items: World.WorldItem[] = [];
+  for (const it of all) {
+    if (state.hiddenCats.has(it.category)) continue;
+    const n = per.get(it.region) || 0;
+    if (n < WORLD_PER_REGION) { per.set(it.region, n + 1); items.push(it); }
+  }
+  state.worldAll = all;
+  state.worldItems = items;
+  const sig = `${state.showWorld}|${items.map(i => i.qid).join(",")}`;
+  if (sig === state.worldSig) return;
+  state.worldSig = sig;
+  const maxSl = Math.max(1, ...items.map(i => i.sitelinks));
+  (map.getSource("world") as GeoJSONSource | undefined)?.setData({
+    type: "FeatureCollection",
+    features: state.showWorld ? items.map(it => ({
+      type: "Feature", geometry: { type: "Point", coordinates: it.coords },
+      properties: { qid: it.qid, color: CAT[it.category]?.color || "#666", w: Math.round((it.sitelinks / maxSl) * 3 * 10) / 10 }
+    })) : []
+  });
+  if (!state.selected) renderMeanwhile();
+}
+
+let meanwhileToken = 0;
+/** Panneau « Pendant ce temps » (F-51) avec indicateur de couverture par région (F-102). */
+function renderMeanwhile(): void {
+  if (state.selected) return;
+  const token = ++meanwhileToken;
+  const body = $("inspector-body");
+  const [a, b] = worldWindow();
+  const span = (b - a) / 2;
+  const spanLabel = span >= 1 ? `${Math.round(span)} ${t_("unit.1y")}${Math.round(span) > 1 ? "s" : ""}` : `${Math.max(1, Math.round(span * 365))} ${t_("unit.1d")}${span * 365 >= 2 ? "s" : ""}`;
+  const counts = new Map<string, number>();
+  state.worldAll.forEach(it => counts.set(it.region, (counts.get(it.region) || 0) + 1));
+  const maxC = Math.max(1, ...counts.values());
+  const top = new Map<string, World.WorldItem[]>();
+  for (const it of state.worldItems) {
+    const l = top.get(it.region) || [];
+    if (l.length < 3) { l.push(it); top.set(it.region, l); }
+  }
+  const qids = [...top.values()].flat().map(i => i.qid);
+  const missing = qids.filter(q => !World.labelOf(q));
+  if (missing.length) World.loadLabels(missing, I18n.getLang()).then(() => { if (token === meanwhileToken) renderMeanwhile(); });
+  const html = World.REGIONS.map(r => {
+    const n = counts.get(r) || 0;
+    const items = top.get(r) || [];
+    return `<section class="mw-region">
+      <div class="mw-head"><strong>${esc(t_("region." + r))}</strong>
+        <span class="mw-cov" title="${esc(t_("world.coverage", { n }))}"><span style="width:${Math.round((n / maxC) * 100)}%"></span></span>
+        ${n < 3 ? `<span class="mw-sparse">${esc(t_("world.sparse"))}</span>` : ""}</div>
+      ${items.length ? `<ul class="event-list">${items.map(it => `<li><button data-wq="${it.qid}">
+        <span class="ico" aria-hidden="true">${CAT[it.category]?.icon || "•"}</span><span class="y">${esc(worldDate(it))}</span><span>${esc(worldTitle(it))}</span></button></li>`).join("")}</ul>` : ""}
+    </section>`;
+  }).join("");
+  body.innerHTML = `<div class="brief"><h2>🌍 ${esc(t_("world.title"))}</h2>
+    <p class="muted small">${esc(t_("world.window", { date: Time.format(state.t, Time.levelForSpan(state.view[1] - state.view[0])), span: spanLabel }))}</p></div>
+    ${state.worldAll.length ? html : `<p class="muted">${esc(t_("world.empty"))}</p>`}
+    <p class="muted small">${esc(t_("world.bias"))}</p>
+    <p class="muted small">${esc(t_("inspector.empty"))}</p>`;
+  body.querySelectorAll<HTMLElement>("[data-wq]").forEach(btn => btn.onclick = () => {
+    const it = state.worldItems.find(x => x.qid === btn.dataset.wq);
+    if (it) inspectWorld(it, true);
+  });
+}
+
+async function inspectWorld(it: World.WorldItem, fly: boolean): Promise<void> {
+  const token = ++state.inspectToken;
+  state.selected = { kind: "world", qid: it.qid };
+  map.setFilter("states-selected", ["==", ["id"], -1]);
+  if (fly) map.flyTo({ center: it.coords, zoom: Math.max(map.getZoom(), 5), duration: 1200 });
+  await World.loadLabels([it.qid], I18n.getLang());
+  if (token !== state.inspectToken) return;
+  const info = World.labelOf(it.qid) || {};
+  const c = CAT[it.category];
+  const inRange = it.t0 >= state.sc.bounds[0] && it.t0 <= state.sc.bounds[1];
+  const built = await World.builtAt();
+  const body = $("inspector-body");
+  body.innerHTML = `
+    <button id="btn-mw-back" class="ghost small">${esc(t_("world.back"))}</button>
+    <div class="brief">
+      <h2><span class="ico-lg" aria-hidden="true">${c?.icon || "🌍"}</span>${esc(worldTitle(it))}</h2>
+      <div><span class="chip" style="background:${c?.color || "#666"}">${esc(c ? catLabel(c) : it.category)}</span></div>
+      <p class="muted">${esc(worldDate(it))} · ${esc(t_("region." + it.region))}</p>
+      <div class="actions">
+        <button id="btn-zoom-w">${esc(t_("inspector.zoomPlace"))}</button>
+        <button id="btn-goto-w">${esc(inRange ? t_("inspector.goto", { date: worldDate(it) }) : t_("world.goExplore"))}</button>
+      </div>
+    </div>`;
+  body.appendChild(drawer("facts", t_("inspector.facts"), `${info.description ? `<p>${esc(info.description)}</p>` : ""}<dl class="facts">
+      <dt>${esc(t_("inspector.date"))}</dt><dd>${esc(worldDate(it))}</dd>
+      <dt>${esc(t_("world.region"))}</dt><dd>${esc(t_("region." + it.region))}</dd>
+    </dl>`));
+  if (info.frwiki) body.appendChild(drawer("summary", t_("inspector.summary"), wikiBlock(Wiki.summary(info.frwiki), token)));
+  body.appendChild(drawer("sources", t_("inspector.sources"), `<dl class="facts">
+      <dt>${esc(t_("inspector.dataSource"))}</dt><dd><a href="${wdUrl(it.qid)}" target="_blank" rel="noopener">${esc(t_("inspector.wikidataSource", { qid: it.qid }))}</a></dd>
+      <dt>${esc(t_("inspector.datePrecision"))}</dt><dd>${esc(t_("precision." + it.precision))}</dd>
+      <dt>${esc(t_("inspector.placePrecision"))}</dt><dd>${esc(t_("precision.place." + it.placePrecision))}</dd>
+      ${built ? `<dt>Index</dt><dd>${esc(t_("world.source", { date: new Date(built).toLocaleDateString(I18n.getLang()) }))}</dd>` : ""}
+    </dl><p class="small"><a href="${wdUrl(it.qid)}" target="_blank" rel="noopener">✎ ${esc(t_("inspector.fixOnWikidata"))}</a></p>`));
+  if (info.frwiki) body.appendChild(articleDrawer(() => Promise.resolve({ title: info.frwiki!, lang: "fr" }), token));
+  $("btn-mw-back").onclick = () => clearSelection();
+  $("btn-zoom-w").onclick = () => map.flyTo({ center: it.coords, zoom: it.placePrecision === "exact" ? 11 : 6, duration: 1600 });
+  $("btn-goto-w").onclick = () => {
+    stopPlay();
+    if (inRange) setTime(it.t0, { follow: true });
+    else { setScenario("libre", { t: it.t0, fly: false }); map.flyTo({ center: it.coords, zoom: 5, duration: 1600 }); }
+  };
+  openInspector();
+}
+
+/** Frises parallèles par région (F-53) : éléments marquants de l'index sur la période visible. */
+let lanesTimer = 0;
+function scheduleLanes(): void {
+  clearTimeout(lanesTimer);
+  lanesTimer = window.setTimeout(refreshLanes, 300);
+}
+async function refreshLanes(): Promise<void> {
+  $("btn-lanes").setAttribute("aria-pressed", String(state.lanesOn));
+  if (!state.lanesOn) { state.laneItems = []; timeline.setLanes([]); return; }
+  const [v0, v1] = state.view;
+  await World.ensure(v0, v1);
+  const items: World.WorldItem[] = [];
+  const lanes: TimelineLane[] = World.REGIONS.map(r => {
+    const evs: TimelineEvent[] = World.query(v0, v1, it => it.region === r).slice(0, 120).map(it => {
+      items.push(it);
+      return { t0: it.t0, t1: Math.max(it.t1, it.t0), color: CAT[it.category]?.color || "#666", category: it.category, title: worldTitle(it), dateLabel: worldDate(it), idx: items.length - 1 };
+    });
+    return { id: r, label: t_("regionShort." + r), items: evs };
+  });
+  state.laneItems = items;
+  timeline.setLanes(lanes);
+}
+
+// ---------------------------------------------------------------------------
 // Interactions carte
 // ---------------------------------------------------------------------------
 map.on("mousemove", e => {
-  const ev = map.queryRenderedFeatures(e.point, { layers: ["events", "clusters", "paths-steps"] })[0];
+  const ev = map.queryRenderedFeatures(e.point, { layers: ["events", "clusters", "paths-steps", "world-dots"] })[0];
   if (ev) {
     map.getCanvas().style.cursor = "pointer";
     setHover(null);
     const pr = ev.properties || {};
+    if (pr.qid && ev.layer.id === "world-dots") {
+      const it = state.worldItems.find(x => x.qid === pr.qid);
+      const ll = (ev.geometry as GeoJSON.Point).coordinates as Pt;
+      const show = () => it && popup.setLngLat(ll).setHTML(`🌍 <strong>${esc(worldTitle(it))}</strong><br><span class="muted">${esc(worldDate(it))} · ${esc(t_("region." + it.region))}</span>`).addTo(map);
+      show();
+      if (it && !World.labelOf(it.qid)) World.loadLabels([it.qid], I18n.getLang()).then(show);
+      return;
+    }
     const html = pr.title ? `<strong>${esc(pr.title)}</strong>` : pr.kind === "step" ? `${esc(t_("inspector.path"))} · <strong>${esc(pr.label)}</strong> (${esc(pr.date)})` : "";
     if (html) popup.setLngLat((ev.geometry as GeoJSON.Point).coordinates as Pt).setHTML(html).addTo(map);
     else popup.remove();
@@ -1038,6 +1251,8 @@ map.on("click", async e => {
   }
   const ev = map.queryRenderedFeatures(box, { layers: ["events"] })[0];
   if (ev) return inspectEvent(ev.properties.idx);
+  const wd = map.queryRenderedFeatures(box, { layers: ["world-dots"] })[0];
+  if (wd) { const it = state.worldItems.find(x => x.qid === wd.properties.qid); if (it) return inspectWorld(it, false); }
   const st: MapGeoJSONFeature | undefined = state.showStates ? map.queryRenderedFeatures(e.point, { layers: ["states-fill"] })[0] : undefined;
   if (st) return inspectState({ id: st.id, properties: st.properties });
   clearSelection();
@@ -1064,6 +1279,7 @@ $("btn-next").onclick = () => { stopPlay(); setTime(state.t + stepSize(), { foll
 $("btn-tzoom-in").onclick = () => timeline.zoom(0.5);
 $("btn-tzoom-out").onclick = () => timeline.zoom(2);
 $("btn-tfit").onclick = () => timeline.fit();
+$("btn-lanes").onclick = () => { state.lanesOn = !state.lanesOn; store.set("lanes", state.lanesOn); refreshLanes(); };
 document.addEventListener("keydown", e => {
   const target = e.target as HTMLElement;
   if (["INPUT", "SELECT", "TEXTAREA", "BUTTON", "SUMMARY"].includes(target.tagName) || target === timeline.canvas) {

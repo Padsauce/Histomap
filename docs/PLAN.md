@@ -4,7 +4,7 @@
 > (`F-xx`) pour être citée dans les tickets, commits et revues. Priorités : **M** (indispensable),
 > **S** (souhaitable), **C** (confort), **L** (plus tard).
 >
-> État : v0.4 — phases 1 et 2 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
+> État : v0.5 — phases 1 à 3 livrées. Application en ligne : https://padsauce.github.io/Histomap/ Prototype : `index.html`,
 > branche `claude/cultural-education-app-224852`.
 
 ---
@@ -527,11 +527,29 @@ Choix techniques notables :
 Reste à faire (reporté) : F-64 (dynastie, invention, thème, période) · F-67 (score de qualité) ·
 F-92 complet (noms officiels datés P1448) · F-62.
 
-### Phase 3 — Synchronie mondiale
-F-50, F-51 (Pendant ce temps) · F-72 (index mondial léger) · catégories Découvertes et Sciences ·
-F-53 (frises parallèles) · F-102 (couverture).
-**Critère de sortie** : à n'importe quelle date entre −3000 et 2000, chaque grande région du monde
-affiche au moins un élément pertinent.
+### Phase 3 — Synchronie mondiale ✅ (livrée le 11/11/2026)
+Livré : F-72 (index mondial léger : `tools/build-index.mjs`, ≈ 15 000 éléments, 1,2 Mo en 38 tranches
+de temps chargées à la demande, reconstruit chaque semaine par GitHub Actions ; l'index du dépôt est
+conservé si la reconstruction échoue) · F-50 (couche « Monde » sur la carte, plafonnée par région) ·
+F-51 (panneau « Pendant ce temps » : les éléments marquants de 8 grandes régions autour de la date) ·
+F-53 (frises parallèles par région sous la frise principale) · F-102 (barre de couverture par région,
+mention « peu documenté » et note sur les biais de Wikidata) · catégories Découvertes et Sciences.
+
+Contenu de l'index : batailles et sièges, traités, révolutions et coups d'État, fondations et fins
+d'États historiques, naissances de personnalités, découvertes et inventions, monuments, lieux de culte,
+fondations de villes anciennes, universités et observatoires, catastrophes et épidémies, expéditions.
+
+Choix techniques notables :
+- Requêtes de l'index exécutées sur **QLever** (Université de Fribourg), qui répond en 1 à 7 s à des
+  requêtes globales qui dépassent le délai du service public de Wikidata ; ce dernier sert de repli.
+- La fenêtre « au même moment » suit l'échelle de la frise (2 % de la durée visible) et s'élargit
+  jusqu'à ×4 quand elle contient moins de 40 éléments.
+- Les découvertes excluent les objets astronomiques (astéroïdes, galaxies…) sauf les plus notables,
+  et les lieux eux-mêmes (continents, îles), qui seraient placés de façon trompeuse.
+
+Biais constaté (F-102) : 61 % des éléments sont situés en Europe, et l'index est beaucoup plus dense
+après 1500. La normalisation par région limite l'effet à l'affichage ; les sujets éditorialisés hors
+d'Europe restent la vraie parade.
 
 ### Phase 4 — Cartographie précise
 F-23, F-24, F-25 (fournisseurs, deux modes) · F-30 (PMTiles) · F-26 (import) · intégration

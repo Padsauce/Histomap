@@ -1,0 +1,276 @@
+{
+ "version": 1,
+ "built": "2026-11-11T09:36:33.808Z",
+ "source": "Wikidata (CC0)",
+ "fields": [
+  "qid",
+  "lon",
+  "lat",
+  "t0",
+  "t1",
+  "precision",
+  "category",
+  "sitelinks",
+  "kind",
+  "placePrecision"
+ ],
+ "categories": [
+  "conflit",
+  "traite",
+  "politique",
+  "personnage",
+  "decouverte",
+  "culture",
+  "religion",
+  "exploration",
+  "migration",
+  "ville",
+  "catastrophe",
+  "science"
+ ],
+ "stats": {
+  "battles": 3290,
+  "treaties": 736,
+  "revolutions": 563,
+  "states-start": 836,
+  "states-end": 840,
+  "births": 6956,
+  "discoveries": 616,
+  "monuments": 275,
+  "worship": 393,
+  "cities": 214,
+  "science": 290,
+  "disasters": 581,
+  "expeditions": 26
+ },
+ "buckets": [
+  {
+   "from": -400000,
+   "to": -10000,
+   "file": "b-400000_-10000.json",
+   "count": 4
+  },
+  {
+   "from": -10000,
+   "to": -3000,
+   "file": "b-10000_-3000.json",
+   "count": 11
+  },
+  {
+   "from": -3000,
+   "to": -1000,
+   "file": "b-3000_-1000.json",
+   "count": 63
+  },
+  {
+   "from": -1000,
+   "to": -500,
+   "file": "b-1000_-500.json",
+   "count": 121
+  },
+  {
+   "from": -500,
+   "to": 0,
+   "file": "b-500_0.json",
+   "count": 460
+  },
+  {
+   "from": 0,
+   "to": 100,
+   "file": "b0_100.json",
+   "count": 79
+  },
+  {
+   "from": 100,
+   "to": 200,
+   "file": "b100_200.json",
+   "count": 55
+  },
+  {
+   "from": 200,
+   "to": 300,
+   "file": "b200_300.json",
+   "count": 107
+  },
+  {
+   "from": 300,
+   "to": 400,
+   "file": "b300_400.json",
+   "count": 93
+  },
+  {
+   "from": 400,
+   "to": 500,
+   "file": "b400_500.json",
+   "count": 82
+  },
+  {
+   "from": 500,
+   "to": 600,
+   "file": "b500_600.json",
+   "count": 100
+  },
+  {
+   "from": 600,
+   "to": 700,
+   "file": "b600_700.json",
+   "count": 171
+  },
+  {
+   "from": 700,
+   "to": 800,
+   "file": "b700_800.json",
+   "count": 124
+  },
+  {
+   "from": 800,
+   "to": 900,
+   "file": "b800_900.json",
+   "count": 154
+  },
+  {
+   "from": 900,
+   "to": 1000,
+   "file": "b900_1000.json",
+   "count": 164
+  },
+  {
+   "from": 1000,
+   "to": 1100,
+   "file": "b1000_1100.json",
+   "count": 207
+  },
+  {
+   "from": 1100,
+   "to": 1200,
+   "file": "b1100_1200.json",
+   "count": 270
+  },
+  {
+   "from": 1200,
+   "to": 1300,
+   "file": "b1200_1300.json",
+   "count": 385
+  },
+  {
+   "from": 1300,
+   "to": 1400,
+   "file": "b1300_1400.json",
+   "count": 339
+  },
+  {
+   "from": 1400,
+   "to": 1500,
+   "file": "b1400_1500.json",
+   "count": 416
+  },
+  {
+   "from": 1500,
+   "to": 1550,
+   "file": "b1500_1550.json",
+   "count": 271
+  },
+  {
+   "from": 1550,
+   "to": 1600,
+   "file": "b1550_1600.json",
+   "count": 270
+  },
+  {
+   "from": 1600,
+   "to": 1650,
+   "file": "b1600_1650.json",
+   "count": 261
+  },
+  {
+   "from": 1650,
+   "to": 1700,
+   "file": "b1650_1700.json",
+   "count": 272
+  },
+  {
+   "from": 1700,
+   "to": 1725,
+   "file": "b1700_1725.json",
+   "count": 227
+  },
+  {
+   "from": 1725,
+   "to": 1750,
+   "file": "b1725_1750.json",
+   "count": 173
+  },
+  {
+   "from": 1750,
+   "to": 1775,
+   "file": "b1750_1775.json",
+   "count": 242
+  },
+  {
+   "from": 1775,
+   "to": 1800,
+   "file": "b1775_1800.json",
+   "count": 421
+  },
+  {
+   "from": 1800,
+   "to": 1825,
+   "file": "b1800_1825.json",
+   "count": 609
+  },
+  {
+   "from": 1825,
+   "to": 1850,
+   "file": "b1825_1850.json",
+   "count": 455
+  },
+  {
+   "from": 1850,
+   "to": 1875,
+   "file": "b1850_1875.json",
+   "count": 733
+  },
+  {
+   "from": 1875,
+   "to": 1900,
+   "file": "b1875_1900.json",
+   "count": 843
+  },
+  {
+   "from": 1900,
+   "to": 1925,
+   "file": "b1900_1925.json",
+   "count": 1473
+  },
+  {
+   "from": 1925,
+   "to": 1950,
+   "file": "b1925_1950.json",
+   "count": 1955
+  },
+  {
+   "from": 1950,
+   "to": 1975,
+   "file": "b1950_1975.json",
+   "count": 1574
+  },
+  {
+   "from": 1975,
+   "to": 2000,
+   "file": "b1975_2000.json",
+   "count": 1267
+  },
+  {
+   "from": 2000,
+   "to": 2025,
+   "file": "b2000_2025.json",
+   "count": 639
+  },
+  {
+   "from": 2025,
+   "to": 2050,
+   "file": "b2025_2050.json",
+   "count": 29
+  }
+ ]
+}

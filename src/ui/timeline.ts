@@ -9,17 +9,21 @@
 import * as Time from "../core/time";
 import type { Unit } from "../core/time";
 
-const ROW_H = 15, EVENT_H = 14, DENSITY_H = 16, AXIS_H = 24, GAP = 3;
+const ROW_H = 15, EVENT_H = 14, DENSITY_H = 16, AXIS_H = 24, GAP = 3, LANE_H = 13, LANE_LABEL_W = 92;
 const MIN_SPAN = 2 / 8765.82; // 2 heures
 
 export interface TimelinePeriod { t0: number; t1: number; label: string; color: string }
 export interface TimelineEvent { t0: number; t1: number; color: string; category: string; title: string; dateLabel: string; idx: number }
+/** Frise parallèle (F-53) : une ligne par région du monde, avec ses éléments marquants. */
+export interface TimelineLane { id: string; label: string; items: TimelineEvent[] }
 export interface TimelineOptions {
   onChange?: (t: number) => void;
   onView?: (view: [number, number]) => void;
   onSelectEvent?: (e: TimelineEvent) => void;
+  onSelectLaneItem?: (lane: TimelineLane, e: TimelineEvent) => void;
 }
-type Hit = { kind: "event"; item: TimelineEvent } | { kind: "period"; item: TimelinePeriod & { row: number } } | null;
+type Hit = { kind: "event"; item: TimelineEvent } | { kind: "period"; item: TimelinePeriod & { row: number } }
+  | { kind: "lane"; lane: TimelineLane; item: TimelineEvent } | null;
 
 export class Timeline {
   opts: TimelineOptions;
@@ -35,6 +39,7 @@ export class Timeline {
   hidden = new Set<string>();
   pointers = new Map<number, number>();
   rowCount = 1;
+  lanes: TimelineLane[] = [];
   width = 0;
   majorUnit?: Unit;
   minorUnit?: Unit | null;
@@ -74,6 +79,7 @@ export class Timeline {
     this.draw();
   }
   setHiddenCategories(set: Set<string>) { this.hidden = set; this.draw(); }
+  setLanes(lanes: TimelineLane[]) { this.lanes = lanes; this.draw(); }
   setTime(t: number, { follow = false } = {}) {
     this.t = t;
     if (follow) {
@@ -122,7 +128,8 @@ export class Timeline {
     const yEvents = GAP + pH + GAP;
     const yDensity = yEvents + EVENT_H + GAP;
     const yAxis = yDensity + DENSITY_H;
-    return { pH, yEvents, yDensity, yAxis, height: yAxis + AXIS_H };
+    const yLanes = yAxis + AXIS_H;
+    return { pH, yEvents, yDensity, yAxis, yLanes, height: yLanes + this.lanes.length * LANE_H + (this.lanes.length ? 4 : 0) };
   }
   x(t: number) { const [v0, v1] = this.view; return ((t - v0) / (v1 - v0)) * this.width; }
   tAt(x: number) { const [v0, v1] = this.view; return v0 + (x / this.width) * (v1 - v0); }
@@ -241,11 +248,35 @@ export class Timeline {
     ctx.stroke();
     ctx.textAlign = "left";
 
+    // Frises parallèles (une ligne par région)
+    this.lanes.forEach((lane, i) => {
+      const y = L.yLanes + i * LANE_H;
+      ctx.fillStyle = line; ctx.globalAlpha = i % 2 ? 0.25 : 0.5;
+      ctx.fillRect(0, y, w, LANE_H - 1);
+      ctx.globalAlpha = 1;
+      for (const e of lane.items) {
+        if (this.hidden.has(e.category)) continue;
+        const x0 = this.x(e.t0), x1 = this.x(e.t1);
+        if (x1 < LANE_LABEL_W || x0 > w + 2) continue;
+        ctx.fillStyle = e.color;
+        ctx.globalAlpha = 0.85;
+        if (x1 - x0 >= 4) ctx.fillRect(Math.max(LANE_LABEL_W, x0), y + 2, x1 - Math.max(LANE_LABEL_W, x0), LANE_H - 5);
+        else ctx.fillRect(x0 - 1, y + 1, 2.5, LANE_H - 3);
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = css.getPropertyValue("--panel").trim() || "#fff";
+      ctx.fillRect(0, y, LANE_LABEL_W - 4, LANE_H - 1);
+      ctx.fillStyle = muted;
+      ctx.font = "10px system-ui, sans-serif";
+      ctx.fillText(lane.label, 4, y + LANE_H / 2);
+      ctx.font = "11px system-ui, sans-serif";
+    });
+
     // Tête de lecture
     const xt = this.x(this.t);
     if (xt >= -1 && xt <= w + 1) {
       ctx.strokeStyle = accent; ctx.fillStyle = accent; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(xt, 0); ctx.lineTo(xt, L.yAxis + 6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(xt, 0); ctx.lineTo(xt, L.height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(xt - 6, 0); ctx.lineTo(xt + 6, 0); ctx.lineTo(xt, 8); ctx.closePath(); ctx.fill();
     }
   }
@@ -262,6 +293,19 @@ export class Timeline {
         if (d < bd) { bd = d; best = e; }
       }
       if (best) return { kind: "event", item: best };
+    }
+    if (y >= L.yLanes && this.lanes.length && x > LANE_LABEL_W) {
+      const lane = this.lanes[Math.floor((y - L.yLanes) / LANE_H)];
+      if (lane) {
+        let best: TimelineEvent | null = null, bd = 5;
+        for (const e of lane.items) {
+          if (this.hidden.has(e.category)) continue;
+          const x0 = this.x(e.t0), x1 = Math.max(x0, this.x(e.t1));
+          const d = x < x0 ? x0 - x : x > x1 ? x - x1 : 0;
+          if (d < bd) { bd = d; best = e; }
+        }
+        if (best) return { kind: "lane", lane, item: best };
+      }
     }
     if (y < L.yEvents - 1) {
       const row = Math.floor((y - GAP) / (ROW_H + 2));
@@ -324,7 +368,7 @@ export class Timeline {
       c.style.cursor = h || Math.abs(x - this.x(this.t)) < 9 ? "pointer" : "grab";
       if (h) {
         this.tip.hidden = false;
-        this.tip.textContent = h.kind === "event" ? `${h.item.dateLabel} — ${h.item.title}` : h.item.label;
+        this.tip.textContent = h.kind === "period" ? h.item.label : `${h.item.dateLabel} — ${h.item.title}`;
         this.tip.style.left = Math.min(this.width - 220, Math.max(0, x - 40)) + "px";
       } else this.tip.hidden = true;
     });
@@ -335,6 +379,7 @@ export class Timeline {
       if (!d || d.mode === "scrub" || d.moved > 3) return;
       const h = this._hit(d.x0, d.y0);
       if (h && h.kind === "event" && this.opts.onSelectEvent) this.opts.onSelectEvent(h.item);
+      else if (h && h.kind === "lane" && this.opts.onSelectLaneItem) this.opts.onSelectLaneItem(h.lane, h.item);
       else if (h && h.kind === "period") {
         const pad = (h.item.t1 - h.item.t0) * 0.08;
         this.setView(h.item.t0 - pad, h.item.t1 + pad);
