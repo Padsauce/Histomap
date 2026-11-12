@@ -4,8 +4,8 @@
  * Les données externes (Wikidata, Wikipédia, frontières) passent par le cache IndexedDB de l'application ;
  * les tuiles du fond de carte ne sont pas mises en cache (conditions d'usage des fournisseurs).
  */
-const CACHE = "histomap-app-v1";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
+const CACHE = "histomap-app-v2";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./favicon.svg", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

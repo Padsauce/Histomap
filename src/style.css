@@ -47,7 +47,7 @@ select { border: 1px solid var(--line); border-radius: 8px; background: var(--pa
 .topbar { display: flex; align-items: center; gap: .75rem; padding: 0 1rem; min-height: 52px; background: var(--panel); border-bottom: 1px solid var(--line); z-index: 5; }
 .brand { display: flex; align-items: center; gap: .5rem; }
 .brand h1 { font-family: var(--serif); font-size: 1.25rem; }
-.logo { color: var(--accent); font-size: 1.3rem; }
+.logo { width: 30px; height: 30px; display: block; }
 .scenario-picker select { font-weight: 600; min-width: 200px; max-width: 34vw; }
 #btn-toggle-left { display: none; }
 

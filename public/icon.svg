@@ -1,1 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#f6f3ec"/><circle cx="256" cy="256" r="190" fill="#2563eb"/><path d="M256 66a190 190 0 0 0 0 380z" fill="#93c5fd"/><path d="M120 300c60-30 90 10 136-20s80-60 140-20" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Histomap</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16294f"/>
+      <stop offset="1" stop-color="#0b1730"/>
+    </linearGradient>
+    <radialGradient id="sea" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#5aa6dc"/>
+      <stop offset="0.6" stop-color="#2b6fae"/>
+      <stop offset="1" stop-color="#173f6e"/>
+    </radialGradient>
+    <radialGradient id="shine" cx="0.32" cy="0.26" r="0.55">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="shade" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.72" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.35"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd98a"/>
+      <stop offset="1" stop-color="#d99a2b"/>
+    </linearGradient>
+    <clipPath id="globe"><circle cx="256" cy="262" r="152"/></clipPath>
+    <!-- Continents (stylisés) -->
+    <path id="eurasia" d="M146 196 C 182 154, 252 140, 322 156 C 366 166, 396 190, 410 222 C 372 222, 346 236, 314 234 C 296 256, 266 254, 248 242 C 222 248, 190 240, 164 232 C 150 222, 142 210, 146 196 Z"/>
+    <path id="africa" d="M246 262 C 278 254, 314 262, 334 288 C 350 314, 334 350, 316 374 C 302 394, 286 410, 272 402 C 262 378, 258 352, 244 332 C 230 312, 226 284, 246 262 Z"/>
+    <path id="americas" d="M106 228 C 122 212, 140 220, 138 250 C 136 282, 120 304, 112 336 C 102 304, 96 262, 106 228 Z"/>
+  </defs>
+
+  <!-- Fond -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Bague du temps (frise) : graduations -->
+  <g stroke="#e8b64c" stroke-linecap="round" opacity="0.7">
+    <g stroke-width="6">
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(-150 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(-120 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(-90 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(-60 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(-30 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(0 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(30 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(60 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(90 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(120 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(150 256 262)"/>
+      <line x1="256" y1="64" x2="256" y2="74" transform="rotate(180 256 262)"/>
+    </g>
+  </g>
+  <!-- Arc parcouru (doré) -->
+  <path d="M 104.7 349.4 A 175 175 0 1 1 401.6 165.1" fill="none" stroke="url(#gold)" stroke-width="13" stroke-linecap="round"/>
+  <!-- Arc restant (discret) -->
+  <path d="M 401.6 165.1 A 175 175 0 0 1 104.7 349.4" fill="none" stroke="#e8b64c" stroke-width="5" stroke-linecap="round" opacity="0.28" stroke-dasharray="2 14"/>
+  <!-- Tête de lecture -->
+  <circle cx="401.6" cy="165.1" r="20" fill="#ffd98a" opacity="0.25"/>
+  <circle cx="401.6" cy="165.1" r="12" fill="url(#gold)" stroke="#fff6dd" stroke-width="3"/>
+
+  <!-- Globe -->
+  <circle cx="256" cy="262" r="152" fill="url(#sea)"/>
+  <g clip-path="url(#globe)">
+    <!-- Méridiens et parallèles -->
+    <g fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2">
+      <ellipse cx="256" cy="262" rx="60" ry="152"/>
+      <ellipse cx="256" cy="262" rx="115" ry="152"/>
+      <line x1="256" y1="110" x2="256" y2="414"/>
+      <ellipse cx="256" cy="262" rx="152" ry="48"/>
+      <ellipse cx="256" cy="262" rx="152" ry="100"/>
+    </g>
+    <!-- Terres -->
+    <g fill="#f1e3c2">
+      <use href="#eurasia"/><use href="#africa"/><use href="#americas"/>
+    </g>
+    <!-- Territoires historiques : deux États rivaux -->
+    <clipPath id="eu"><use href="#eurasia"/></clipPath>
+    <g clip-path="url(#eu)">
+      <path d="M120 120 L 248 120 C 238 170, 262 200, 236 260 L 120 260 Z" fill="#2f6fe4"/>
+      <path d="M248 120 L 420 120 L 420 260 L 236 260 C 262 200, 238 170, 248 120 Z" fill="#e0453f"/>
+    </g>
+    <!-- Frontière -->
+    <path d="M 248 150 C 240 176, 258 204, 240 246" fill="none" stroke="#fff6dd" stroke-width="4" stroke-dasharray="7 6" stroke-linecap="round"/>
+    <!-- Contours des terres -->
+    <g fill="none" stroke="#0b1730" stroke-opacity="0.35" stroke-width="2.5">
+      <use href="#eurasia"/><use href="#africa"/><use href="#americas"/>
+    </g>
+    <!-- Ombrage du globe -->
+    <circle cx="256" cy="262" r="152" fill="url(#shade)"/>
+    <circle cx="256" cy="262" r="152" fill="url(#shine)"/>
+  </g>
+  <circle cx="256" cy="262" r="152" fill="none" stroke="#0b1730" stroke-opacity="0.5" stroke-width="3"/>
+
+  <!-- Repère d'événement -->
+  <g transform="translate(300 300)">
+    <path d="M0 -42 C -20 -42, -30 -28, -30 -14 C -30 6, 0 30, 0 30 C 0 30, 30 6, 30 -14 C 30 -28, 20 -42, 0 -42 Z" fill="url(#gold)" stroke="#fff6dd" stroke-width="3.5"/>
+    <circle cx="0" cy="-14" r="10" fill="#16294f"/>
+  </g>
+</svg>
