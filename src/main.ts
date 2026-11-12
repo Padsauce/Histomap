@@ -12,7 +12,7 @@ import { generate, fetchFacts } from "./core/generator";
 import { Timeline, type TimelineEvent, type TimelineLane } from "./ui/timeline";
 import * as World from "./core/worldindex";
 import * as Borders from "./core/borders";
-import { Morpher } from "./core/morph";
+import { Morpher, CrossFade, type MorphData } from "./core/morph";
 import { Teacher, worldToEvent } from "./ui/teacher";
 import { CATEGORIES } from "./data/categories";
 import { SCENARIOS as CURATED } from "./data/scenarios";
@@ -169,7 +169,7 @@ const state = {
   frame: null as Borders.BordersFrame | null,
   bordersMode: store.get<Borders.BordersMode>("bordersMode", "fast"),
   dynamic: store.get("dynamicBorders", true),
-  morph: null as null | { key: string; m: Morpher; tA: number; tB: number; nextYear: number },
+  morph: null as null | { key: string; m: Morpher | CrossFade; tA: number; tB: number; nextYear: number; fallback: boolean },
   morphF: -1,
   labels: new Map<string, { name: string; pt: Pt; area: number; props: Record<string, any> }[]>(),
   decorated: null as FC | null,
@@ -609,9 +609,8 @@ async function refreshStates(force = false): Promise<void> {
   if (frameChanged || force) (map.getSource("composites") as GeoJSONSource).setData(frame.composites);
   // Frontières dynamiques : interpolation vers l'état connu suivant
   if (state.dynamic) {
-    await ensureMorph(frame);
-    if (seq !== loadSeq) return;
-    if (state.morph) {
+    ensureMorph(frame); // préparation en arrière-plan ; en attendant, l'état connu est affiché tel quel
+    if (state.morph && state.morph.key.startsWith(frame.key + "→")) {
       const rolesChanged = state.sig.decorated !== state.sig.actors;
       state.sig.decorated = state.sig.actors;
       applyMorph(force || frameChanged || rolesChanged);
@@ -620,6 +619,7 @@ async function refreshStates(force = false): Promise<void> {
       return;
     }
   } else state.morph = null;
+  if (state.morph && !state.morph.key.startsWith(frame.key + "→")) state.morph = null;
   if (sameShape && state.sig.decorated === state.sig.actors) return; // mêmes tracés, mêmes rôles
   state.sig.decorated = state.sig.actors;
   state.decorated = decorate(frame.fc);
@@ -630,12 +630,57 @@ async function refreshStates(force = false): Promise<void> {
   Borders.prefetch(state.t + (state.view[1] - state.view[0]) * 0.05, state.bordersMode);
 }
 /** Prépare l'interpolation entre le cadre courant et l'état connu suivant (une fois par couple). */
+/*
+ * Préparation des transferts de territoire dans un Web Worker (l'interface reste fluide), avec un
+ * délai maximal : au-delà (cartes très détaillées et très différentes), repli sur un fondu enchaîné.
+ */
+const MORPH_TIMEOUT = 8000;
+let morphWorker: Worker | null = null, morphJob: { id: number; key: string } | null = null, morphSeq = 0;
+const morphCache = new Map<string, Morpher | CrossFade>();
+const morphFallback = new Set<string>();
+function buildMorph(key: string, A: FC, B: FC): Promise<Morpher | null> {
+  if (morphJob && morphWorker) { morphWorker.terminate(); morphWorker = null; } // une seule préparation à la fois
+  if (!morphWorker) {
+    try { morphWorker = new Worker(new URL("./core/morph.worker.ts", import.meta.url), { type: "module" }); }
+    catch { return Promise.resolve(new Morpher(A, B)); } // navigateur sans workers modules : calcul direct
+  }
+  const id = ++morphSeq, w = morphWorker;
+  morphJob = { id, key };
+  return new Promise(resolve => {
+    const timer = window.setTimeout(() => { if (morphJob?.id === id) { w.terminate(); morphWorker = null; morphJob = null; } resolve(null); }, MORPH_TIMEOUT);
+    w.onmessage = (e: MessageEvent<{ id: number; data?: MorphData; error?: string }>) => {
+      if (e.data.id !== id) return;
+      clearTimeout(timer);
+      morphJob = null;
+      resolve(e.data.data ? Morpher.fromData(e.data.data) : null);
+    };
+    w.onerror = () => { clearTimeout(timer); morphJob = null; resolve(null); };
+    w.postMessage({ id, A, B });
+  });
+}
+let morphPending = "";
 async function ensureMorph(frame: Borders.BordersFrame): Promise<void> {
   if (state.morph && state.morph.key.startsWith(frame.key + "→")) return;
   const pair = await Borders.nextFrame(frame, state.bordersMode).catch(() => null);
   if (!pair || pair.next.key === frame.key) { state.morph = null; return; }
-  state.morph = { key: frame.key + "→" + pair.next.key, m: new Morpher(frame.fc, pair.next.fc), tA: pair.tA, tB: pair.tB, nextYear: pair.next.year };
-  state.morphF = -1;
+  const key = frame.key + "→" + pair.next.key;
+  const install = (m: Morpher | CrossFade) => {
+    if (state.frame?.key !== frame.key || !state.dynamic) return;
+    state.morph = { key, m, tA: pair.tA, tB: pair.tB, nextYear: pair.next.year, fallback: m instanceof CrossFade };
+    state.morphF = -1;
+    applyMorph(true);
+  };
+  const cached = morphCache.get(key);
+  if (cached) { install(cached); return; }
+  if (morphPending === key) return;
+  morphPending = key;
+  const m = await buildMorph(key, frame.fc, pair.next.fc);
+  if (morphPending === key) morphPending = "";
+  const res: Morpher | CrossFade = m || new CrossFade(frame.fc, pair.next.fc);
+  if (!m) morphFallback.add(key);
+  morphCache.set(key, res);
+  if (morphCache.size > 8) morphCache.delete(morphCache.keys().next().value!);
+  install(res);
 }
 let morphTimer = 0, morphLast = 0;
 /** Applique l'interpolation pour la date courante (limitée à ≈ 12 rafraîchissements par seconde). */
@@ -655,7 +700,7 @@ function applyMorph(force = false): void {
   state.decorated = decorate(mo.m.at(f));
   (map.getSource("states") as GeoJSONSource).setData(state.decorated);
   const badge = state.frame ? bordersBadge(state.frame) : "";
-  $("snapshot-badge").textContent = f > 0.001 ? `${badge} → ${Time.fmtYearHist(mo.nextYear)} · ${t_("map.transition")}` : badge;
+  $("snapshot-badge").textContent = f > 0.001 ? `${badge} → ${Time.fmtYearHist(mo.nextYear)} · ${t_(mo.fallback ? "map.transitionFade" : "map.transition")}` : badge;
 }
 
 function refreshLabels(force: boolean): void {

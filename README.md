@@ -14,8 +14,9 @@ s'adapte au sujet, de 100 000 ans à l'heure.
 - **Deux modes de frontières** (Affichage → Frontières) : *rapide* (instantanés historical-basemaps,
   monde entier) ou *précis* (Cliopatria, année par année, de 3400 av. J.-C. à 2024, avec les empires et
   alliances en pointillé). Avant 6000 av. J.-C., la carte montre les terres émergées par la baisse des mers.
-- **Frontières dynamiques** : entre deux états connus, les contours glissent progressivement
-  (interpolation signalée comme telle ; désactivable).
+- **Frontières dynamiques** : entre deux états connus, seuls les territoires qui changent de mains
+  bougent — un front avance à travers chacun d'eux, le reste des frontières reste fixe, sans vide ni
+  chevauchement entre voisins (interpolation signalée comme telle ; désactivable).
 - **Mode professeur** (bouton 🎒 Préparer) : ajoutez événements, États et vues à un sujet de cours,
   ordonnez-les, annotez-les, posez des notes sur la carte, lancez une **visite guidée** en plein écran,
   imprimez une **fiche élève** ou **téléchargez le sujet** (`.histomap`) pour l'ouvrir sans connexion.
@@ -85,7 +86,7 @@ npm run build:borders  # télécharge Cliopatria et prépare le mode précis (pu
 | `src/core/types.ts` | Types du modèle de données |
 | `src/ui/timeline.ts` | Frise zoomable (canvas) |
 | `src/ui/teacher.ts` | Mode Préparation, paquets hors ligne, visite guidée, fiche élève |
-| `src/core/morph.ts` | Frontières dynamiques (interpolation des contours) |
+| `src/core/morph.ts`, `src/core/morph.worker.ts` | Frontières dynamiques (transferts de territoire, calcul en arrière-plan) |
 | `public/sw.js`, `public/manifest.webmanifest` | Application installable et hors ligne |
 | `src/i18n/` | Textes d'interface (français, anglais) |
 | `src/data/` | Sujets éditorialisés, catégories, noms d'États par époque |

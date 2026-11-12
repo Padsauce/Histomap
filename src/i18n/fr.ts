@@ -237,6 +237,7 @@ const dict: Record<string, string | string[]> = {
   "sheet.question": "Que s'est-il passé : « {title} » ? Situez-le sur la carte.",
   "sheet.sources": "Sources : Wikidata (CC0), Wikipédia (CC BY-SA), frontières historical-basemaps / Cliopatria. Fiche générée par Histomap.",
   "prep.textsMissing": "{n} texte(s) Wikipédia n'ont pas pu être inclus (réseau) : ils resteront consultables en ligne.",
+  "map.transitionFade": "fondu (cartes trop différentes pour une transition détaillée)",
   "chrono.empty": "Aucun événement pour les catégories sélectionnées.",
   "chrono.count": "{n} événement(s)"
 };

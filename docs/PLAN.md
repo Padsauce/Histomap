@@ -592,11 +592,18 @@ worker qui garde l'application, l'index mondial et la paléogéographie) · F-84
 écran, ← → / Page précédente-suivante, Échap) · F-85 (notes posées sur la carte) · F-86 (fiche élève
 imprimable : carte, chronologie, notes, questions).
 
-En complément (demande du 11/11/2026) — **F-28 frontières dynamiques** : entre deux états connus
-(instantanés en mode rapide, changements de tracé en mode précis), les contours de chaque État glissent
-progressivement (rééchantillonnage, alignement, interpolation adoucie) ; les États qui naissent ou
-disparaissent apparaissent en fondu. Le badge indique « transition interpolée » : c'est une
+En complément (demandes des 11 et 12/11/2026) — **F-28 frontières dynamiques**, par **transferts de
+territoire** : entre deux états connus (instantanés en mode rapide, changements de tracé en mode
+précis), on calcule pour chaque État la partie conservée (A ∩ B, immobile au point près) et les
+portions qui changent de mains (A_x ∩ B_y). Un front rectiligne traverse chaque portion depuis l'État
+qui la gagne ; les deux morceaux sont découpés par la même droite, donc la frontière en mouvement est
+commune aux deux voisins (ni vide, ni chevauchement). Les terres qui cessent ou commencent d'être
+revendiquées apparaissent en fondu. Calcul dans un Web Worker (0,2 s pour une transition Cliopatria) ;
+au-delà de 8 s (instantanés très détaillés et dessinés indépendamment, ex. 1400 → 1492), repli sur
+un fondu enchaîné, signalé dans le badge. Le badge indique « transition interpolée » : c'est une
 visualisation, les frontières réelles changent souvent d'un coup. Désactivable dans Affichage.
+Tests : sommets immobiles hors de la zone transférée, États non concernés inchangés, surface totale
+conservée et aucun chevauchement à chaque instant.
 
 Limites : le fond de carte n'est pas inclus dans les paquets (conditions d'usage des fournisseurs de
 tuiles) — hors ligne, la carte montre les États sur fond uni ; les articles Wikipédia complets ne sont
