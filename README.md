@@ -14,6 +14,8 @@ s'adapte au sujet, de 100 000 ans à l'heure.
 - **Deux modes de frontières** (Affichage → Frontières) : *rapide* (instantanés historical-basemaps,
   monde entier) ou *précis* (Cliopatria, année par année, de 3400 av. J.-C. à 2024, avec les empires et
   alliances en pointillé). Avant 6000 av. J.-C., la carte montre les terres émergées par la baisse des mers.
+- **Côtes précises** : le trait de côte moderne sert de masque — les États ne débordent plus en mer
+  et occupent toute la terre jusqu'à la côte, avec un contour continu.
 - **Frontières dynamiques** : entre deux états connus, seuls les territoires qui changent de mains
   bougent — un front avance à travers chacun d'eux, le reste des frontières reste fixe, sans vide ni
   chevauchement entre voisins (interpolation signalée comme telle ; désactivable). Les transitions

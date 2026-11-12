@@ -264,12 +264,39 @@ function roleOf(props: Record<string, any>) {
   return { role: "other", color: name ? hashColor(name) : "#cccccc", actor: null as ActorN | null };
 }
 
+/** Couleur CSS (#rrggbb, rgb(), hsl()) → composantes RVB. */
+function toRGB(c: string): [number, number, number] {
+  let m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (m) { const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+  m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(c);
+  if (m) return [+m[1], +m[2], +m[3]];
+  m = /^hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/i.exec(c);
+  if (m) {
+    const h = +m[1] / 360, sat = +m[2] / 100, l = +m[3] / 100;
+    const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
+    const f = (t: number) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
+  }
+  return [200, 200, 200];
+}
+const LAND: [number, number, number] = [0xec, 0xe6, 0xd8]; // couleur des terres du fond de carte
+/** Couleur opaque équivalente à « couleur posée à alpha sur les terres » (masque terre/mer). */
+function solid(c: string, alpha: number): string {
+  const [r, g, b] = toRGB(c);
+  const mix = (x: number, y: number) => Math.round(x * alpha + y * (1 - alpha));
+  return `rgb(${mix(r, LAND[0])},${mix(g, LAND[1])},${mix(b, LAND[2])})`;
+}
+
 function decorate(fc: FC): FC {
   return {
     type: "FeatureCollection",
     features: fc.features.map((f, i) => {
       const r = roleOf(f.properties || {});
-      return { type: "Feature", id: i, geometry: f.geometry, properties: { ...f.properties, _role: r.role, _color: r.color } };
+      const a = r.role === "other" ? 0.32 : 0.58;
+      return {
+        type: "Feature", id: i, geometry: f.geometry,
+        properties: { ...f.properties, _role: r.role, _color: r.color, _solid: solid(r.color, a), _hover: solid(r.color, 0.75) }
+      };
     })
   };
 }
@@ -419,8 +446,13 @@ function refreshPaths(): void {
  * aucune frontière moderne ; villes et routes actuelles en option (« Repères modernes »).
  */
 const OFM = "https://tiles.openfreemap.org";
-const BASE_LAYERS = ["ofm-ice", "ofm-water", "ofm-rivers"];
+const BASE_LAYERS = ["ofm-ice", "ofm-water", "coast-line", "ofm-rivers", "states-halo"];
 const MODERN_LAYERS = ["ofm-roads", "ofm-places"];
+/** Remplissage opaque (fond « carte », masque terre/mer actif). */
+const FILL_SOLID: any = {
+  "fill-color": ["case", ["boolean", ["feature-state", "hover"], false], ["get", "_hover"], ["get", "_solid"]],
+  "fill-opacity": ["coalesce", ["get", "_op"], 1]
+};
 const fillOpacity = (k: number): any => ["*", ["coalesce", ["get", "_op"], 1], ["case",
   ["boolean", ["feature-state", "hover"], false], 0.75 * k,
   ["==", ["get", "_role"], "other"], 0.32 * k,
@@ -438,7 +470,8 @@ const map = new maplibregl.Map({
     sources: {
       ofm: { type: "vector", url: `${OFM}/planet`, attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">contributeurs OpenStreetMap</a>' },
       satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Imagerie © Esri" },
-      states: { type: "geojson", data: emptyFC(), attribution: "Frontières : historical-basemaps (GPL-3.0) / Cliopatria (Seshat)" },
+      // Tuiles larges (zoom max 7) avec recouvrement maximal : la marge côtière n'est pas coupée au bord des tuiles
+      states: { type: "geojson", data: emptyFC(), maxzoom: 7, buffer: 512, attribution: "Frontières : historical-basemaps (GPL-3.0) / Cliopatria (Seshat)" },
       composites: { type: "geojson", data: emptyFC() },
       user: { type: "geojson", data: emptyFC() },
       paleo: { type: "geojson", data: emptyFC(), attribution: "Bathymétrie : Natural Earth" },
@@ -453,29 +486,45 @@ const map = new maplibregl.Map({
     layers: [
       { id: "bg", type: "background", paint: { "background-color": "#ece6d8" } },
       { id: "ofm-ice", type: "fill", source: "ofm", "source-layer": "landcover", filter: ["==", ["get", "class"], "ice"], paint: { "fill-color": "#f7f9fb", "fill-opacity": 0.9 } },
-      { id: "ofm-water", type: "fill", source: "ofm", "source-layer": "water", paint: { "fill-color": "#bcd2df" } },
-      {
-        id: "ofm-rivers", type: "line", source: "ofm", "source-layer": "waterway", filter: ["==", ["get", "class"], "river"],
-        paint: { "line-color": "#a7c3d4", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.3, 8, 1.2, 12, 2.5] }
-      },
       { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
       // Paléogéographie (F-21) : terres émergées au dernier maximum glaciaire, approximées par
       // les plateaux continentaux (profondeur < 200 m) ; seules les mers profondes restent en bleu.
       { id: "paleo-land", type: "background", layout: { visibility: "none" }, paint: { "background-color": "#d8c9a3", "background-opacity": 0 } },
       { id: "paleo-sea", type: "fill", source: "paleo", layout: { visibility: "none" }, paint: { "fill-color": "#8fb5cf", "fill-opacity": 0 } },
-      { id: "states-fill", type: "fill", source: "states", paint: { "fill-color": ["get", "_color"], "fill-opacity": ["interpolate", ["linear"], ["zoom"], 7, fillOpacity(1), 12, fillOpacity(0.45)] } },
+      /*
+       * Masque terre/mer : les États sont dessinés en couleurs opaques (pré-mélangées avec les terres),
+       * avec une marge de leur couleur d'environ 25 km sous les remplissages (cachée par les voisins,
+       * visible seulement sur les côtes oubliées par les tracés grossiers) ; puis la mer moderne est
+       * dessinée PAR-DESSUS : ce qui déborde en mer disparaît, la côte devient le trait de côte précis.
+       */
+      {
+        id: "states-halo", type: "line", source: "states", layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": ["get", "_solid"], "line-opacity": ["coalesce", ["get", "_op"], 1], "line-width": ["interpolate", ["exponential", 2], ["zoom"], 2, 1.8, 13, 3700] }
+      },
+      { id: "states-fill", type: "fill", source: "states", paint: FILL_SOLID },
       { id: "states-line", type: "line", source: "states", paint: { "line-color": "#4b5563", "line-opacity": ["*", 0.45, ["coalesce", ["get", "_op"], 1]], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.4, 8, 1.2] } },
       {
         id: "states-key-line", type: "line", source: "states",
         filter: ["in", ["get", "_role"], ["literal", ["focus", "rival", "ally", "context"]]],
         paint: { "line-color": ["get", "_color"], "line-width": ["interpolate", ["linear"], ["zoom"], 2, 1.2, 8, 3] }
       },
-      { id: "states-selected", type: "line", source: "states", filter: ["==", ["get", "NAME"], "\u0000"], paint: { "line-color": "#111827", "line-width": 2.5, "line-dasharray": [2, 1] } },
       // Frontières importées par l'utilisateur (F-26)
       { id: "user-fill", type: "fill", source: "user", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.25 } },
       { id: "user-line", type: "line", source: "user", paint: { "line-color": "#b45309", "line-width": 2.5, "line-dasharray": [1, 1] } },
       // Ensembles composites du mode précis (empires, alliances, suzerainetés) : contour seul (F-27)
       { id: "composites-line", type: "line", source: "composites", paint: { "line-color": "#374151", "line-width": ["interpolate", ["linear"], ["zoom"], 2, 1, 8, 2.2], "line-dasharray": [3, 2], "line-opacity": 0.75 } },
+      // Mer moderne au-dessus des États (masque), puis fleuves
+      { id: "ofm-water", type: "fill", source: "ofm", "source-layer": "water", paint: { "fill-color": "#bcd2df", "fill-opacity": 1 } },
+      // Contour constant : le trait de côte prolonge les frontières terrestres, dans le même style
+      {
+        id: "coast-line", type: "line", source: "ofm", "source-layer": "water", layout: { "line-join": "round" },
+        paint: { "line-color": "#4b5563", "line-opacity": 0.45, "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.4, 8, 1.2] }
+      },
+      {
+        id: "ofm-rivers", type: "line", source: "ofm", "source-layer": "waterway", filter: ["==", ["get", "class"], "river"],
+        paint: { "line-color": "#a7c3d4", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.3, 8, 1.2, 12, 2.5] }
+      },
+      { id: "states-selected", type: "line", source: "states", filter: ["==", ["get", "NAME"], "\u0000"], paint: { "line-color": "#111827", "line-width": 2.5, "line-dasharray": [2, 1] } },
       {
         id: "ofm-roads", type: "line", source: "ofm", "source-layer": "transportation", layout: { visibility: "none", "line-cap": "round" },
         filter: ["in", ["get", "class"], ["literal", ["motorway", "trunk", "primary", "secondary"]]],
@@ -815,6 +864,9 @@ function updatePaleo(): void {
   map.setLayoutProperty("paleo-sea", "visibility", vis);
   map.setPaintProperty("paleo-land", "background-opacity", 0.6 * k);
   map.setPaintProperty("paleo-sea", "fill-opacity", 0.95 * k);
+  // Mers plus basses : le masque de la côte moderne s'efface au profit des terres émergées
+  map.setPaintProperty("ofm-water", "fill-opacity", 1 - k);
+  map.setPaintProperty("coast-line", "line-opacity", 0.45 * (1 - k));
   renderLegend();
 }
 
@@ -1704,6 +1756,9 @@ $<HTMLSelectElement>("opt-basemap").onchange = e => {
   const sat = (e.target as HTMLSelectElement).value === "satellite";
   map.setLayoutProperty("satellite", "visibility", sat ? "visible" : "none");
   BASE_LAYERS.forEach(l => map.setLayoutProperty(l, "visibility", sat ? "none" : "visible"));
+  // Sur l'imagerie satellite : remplissages translucides, sans masque terre/mer
+  map.setPaintProperty("states-fill", "fill-color", sat ? ["get", "_color"] : FILL_SOLID["fill-color"]);
+  map.setPaintProperty("states-fill", "fill-opacity", sat ? ["interpolate", ["linear"], ["zoom"], 7, fillOpacity(1), 12, fillOpacity(0.45)] : FILL_SOLID["fill-opacity"]);
 };
 $<HTMLSelectElement>("opt-lang").onchange = e => {
   I18n.setLang((e.target as HTMLSelectElement).value);

@@ -615,6 +615,15 @@ date ≤ 4 ms pendant le calcul) ; après rechargement, tout est retrouvé en 2 
 `.histomap` peuvent inclure les transitions (calculées sur les frontières exactes du paquet) : à
 l'ouverture, aucun calcul n'est nécessaire.
 
+**Masque terre/mer** (demande du 12/11/2026) : le trait de côte moderne (OpenStreetMap, via
+OpenFreeMap) corrige les tracés historiques grossiers dans les deux sens. La mer est dessinée
+par-dessus les États (rien ne déborde en mer) ; sous les remplissages, chaque État reçoit une marge de
+sa couleur d'environ 25 km, cachée à l'intérieur par les voisins et visible seulement sur les côtes que
+les tracés oubliaient. Les remplissages deviennent opaques (couleurs pré-mélangées avec les terres) ;
+un contour de côte, dans le style des frontières, garde un contour continu. En mode satellite :
+remplissages translucides, sans masque ; en préhistoire, le masque s'efface au profit des terres
+émergées.
+
 Limites : le fond de carte n'est pas inclus dans les paquets (conditions d'usage des fournisseurs de
 tuiles) — hors ligne, la carte montre les États sur fond uni ; les articles Wikipédia complets ne sont
 pas inclus (seulement les résumés) ; les paquets ouverts ne sont gardés que pendant la session.
