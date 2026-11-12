@@ -413,7 +413,14 @@ function refreshPaths(): void {
 // ---------------------------------------------------------------------------
 // Carte
 // ---------------------------------------------------------------------------
-const cartoTiles = (layer: string) => ["a", "b", "c", "d"].map(s => `https://${s}.basemaps.cartocdn.com/rastertiles/${layer}/{z}/{x}/{y}.png`);
+/*
+ * Fond de carte : tuiles vectorielles OpenFreeMap (données OpenStreetMap, schéma OpenMapTiles),
+ * gratuites, sans clé ni filigrane. Style sobre sur mesure : terres, mers, glaces et grands fleuves ;
+ * aucune frontière moderne ; villes et routes actuelles en option (« Repères modernes »).
+ */
+const OFM = "https://tiles.openfreemap.org";
+const BASE_LAYERS = ["ofm-ice", "ofm-water", "ofm-rivers"];
+const MODERN_LAYERS = ["ofm-roads", "ofm-places"];
 const fillOpacity = (k: number): any => ["*", ["coalesce", ["get", "_op"], 1], ["case",
   ["boolean", ["feature-state", "hover"], false], 0.75 * k,
   ["==", ["get", "_role"], "other"], 0.32 * k,
@@ -427,10 +434,9 @@ const map = new maplibregl.Map({
   maxZoom: 17,
   style: {
     version: 8,
-    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    glyphs: `${OFM}/fonts/{fontstack}/{range}.pbf`,
     sources: {
-      voyager: { type: "raster", tiles: cartoTiles("voyager_nolabels"), tileSize: 256, attribution: "© OpenStreetMap contributors © CARTO" },
-      modern: { type: "raster", tiles: cartoTiles("voyager_only_labels"), tileSize: 256 },
+      ofm: { type: "vector", url: `${OFM}/planet`, attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">contributeurs OpenStreetMap</a>' },
       satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Imagerie © Esri" },
       states: { type: "geojson", data: emptyFC(), attribution: "Frontières : historical-basemaps (GPL-3.0) / Cliopatria (Seshat)" },
       composites: { type: "geojson", data: emptyFC() },
@@ -445,8 +451,13 @@ const map = new maplibregl.Map({
       "clusters-text": { type: "geojson", data: emptyFC(), cluster: true, clusterMaxZoom: 7, clusterRadius: 34 }
     },
     layers: [
-      { id: "bg", type: "background", paint: { "background-color": "#c9dbe6" } },
-      { id: "voyager", type: "raster", source: "voyager", paint: { "raster-saturation": -0.4 } },
+      { id: "bg", type: "background", paint: { "background-color": "#ece6d8" } },
+      { id: "ofm-ice", type: "fill", source: "ofm", "source-layer": "landcover", filter: ["==", ["get", "class"], "ice"], paint: { "fill-color": "#f7f9fb", "fill-opacity": 0.9 } },
+      { id: "ofm-water", type: "fill", source: "ofm", "source-layer": "water", paint: { "fill-color": "#bcd2df" } },
+      {
+        id: "ofm-rivers", type: "line", source: "ofm", "source-layer": "waterway", filter: ["==", ["get", "class"], "river"],
+        paint: { "line-color": "#a7c3d4", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.3, 8, 1.2, 12, 2.5] }
+      },
       { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
       // Paléogéographie (F-21) : terres émergées au dernier maximum glaciaire, approximées par
       // les plateaux continentaux (profondeur < 200 m) ; seules les mers profondes restent en bleu.
@@ -465,11 +476,25 @@ const map = new maplibregl.Map({
       { id: "user-line", type: "line", source: "user", paint: { "line-color": "#b45309", "line-width": 2.5, "line-dasharray": [1, 1] } },
       // Ensembles composites du mode précis (empires, alliances, suzerainetés) : contour seul (F-27)
       { id: "composites-line", type: "line", source: "composites", paint: { "line-color": "#374151", "line-width": ["interpolate", ["linear"], ["zoom"], 2, 1, 8, 2.2], "line-dasharray": [3, 2], "line-opacity": 0.75 } },
-      { id: "modern", type: "raster", source: "modern", layout: { visibility: "none" }, paint: { "raster-opacity": 0.85 } },
+      {
+        id: "ofm-roads", type: "line", source: "ofm", "source-layer": "transportation", layout: { visibility: "none", "line-cap": "round" },
+        filter: ["in", ["get", "class"], ["literal", ["motorway", "trunk", "primary", "secondary"]]],
+        paint: { "line-color": "#8a7f6d", "line-opacity": 0.6, "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.4, 10, 1.4, 14, 3] }
+      },
+      {
+        id: "ofm-places", type: "symbol", source: "ofm", "source-layer": "place", layout: {
+          visibility: "none",
+          "text-field": ["coalesce", ["get", "name:fr"], ["get", "name:latin"], ["get", "name"]],
+          "text-font": ["Noto Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 4, 10, 10, 13],
+          "symbol-sort-key": ["get", "rank"]
+        },
+        filter: ["in", ["get", "class"], ["literal", ["city", "town", "village"]]],
+        paint: { "text-color": "#4b4337", "text-halo-color": "rgba(255,255,255,.85)", "text-halo-width": 1.2 }
+      },
       {
         id: "state-labels", type: "symbol", source: "labels",
         layout: {
-          "text-field": ["get", "label"], "text-font": ["Open Sans Semibold"],
+          "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 1, ["case", ["==", ["get", "important"], 1], 12, 10], 6, ["case", ["==", ["get", "important"], 1], 18, 14]],
           "text-max-width": 8, "symbol-sort-key": ["-", 0, ["get", "sort"]], "text-padding": 4
         },
@@ -520,7 +545,7 @@ const map = new maplibregl.Map({
       },
       {
         id: "cluster-count", type: "symbol", source: "clusters-text", filter: ["has", "point_count"],
-        layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Open Sans Semibold"], "text-size": 12, "text-allow-overlap": true },
+        layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-allow-overlap": true },
         paint: { "text-color": "#fff" }
       },
       {
@@ -535,7 +560,7 @@ const map = new maplibregl.Map({
       },
       {
         id: "events-label", type: "symbol", source: "events-text", filter: ["!=", ["get", "phase"], "past"], minzoom: 6,
-        layout: { "text-field": ["get", "title"], "text-font": ["Open Sans Semibold"], "text-size": 12, "text-offset": [0, 1.5], "text-anchor": "top", "text-max-width": 12 },
+        layout: { "text-field": ["get", "title"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-offset": [0, 1.5], "text-anchor": "top", "text-max-width": 12 },
         paint: { "text-color": "#111827", "text-halo-color": "#fff", "text-halo-width": 1.5, "text-opacity": ["get", "opacity"] }
       }
     ]
@@ -1645,7 +1670,7 @@ $("generating-cancel").onclick = () => { genAbort.cancelled = true; $("generatin
 
 $<HTMLInputElement>("opt-trail").onchange = () => refreshEvents(true);
 $<HTMLInputElement>("opt-labels").onchange = e => map.setLayoutProperty("state-labels", "visibility", (e.target as HTMLInputElement).checked && state.showStates ? "visible" : "none");
-$<HTMLInputElement>("opt-modern").onchange = e => map.setLayoutProperty("modern", "visibility", (e.target as HTMLInputElement).checked ? "visible" : "none");
+$<HTMLInputElement>("opt-modern").onchange = e => MODERN_LAYERS.forEach(l => map.setLayoutProperty(l, "visibility", (e.target as HTMLInputElement).checked ? "visible" : "none"));
 $<HTMLInputElement>("opt-globe").onchange = e => map.setProjection({ type: (e.target as HTMLInputElement).checked ? "globe" : "mercator" });
 $<HTMLInputElement>("opt-cvd").checked = state.cvd;
 $<HTMLInputElement>("opt-cvd").onchange = e => {
@@ -1678,7 +1703,7 @@ $<HTMLSelectElement>("opt-borders").onchange = e => {
 $<HTMLSelectElement>("opt-basemap").onchange = e => {
   const sat = (e.target as HTMLSelectElement).value === "satellite";
   map.setLayoutProperty("satellite", "visibility", sat ? "visible" : "none");
-  map.setLayoutProperty("voyager", "visibility", sat ? "none" : "visible");
+  BASE_LAYERS.forEach(l => map.setLayoutProperty(l, "visibility", sat ? "none" : "visible"));
 };
 $<HTMLSelectElement>("opt-lang").onchange = e => {
   I18n.setLang((e.target as HTMLSelectElement).value);

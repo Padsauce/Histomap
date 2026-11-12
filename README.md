@@ -114,7 +114,7 @@ Il faut l'activer **une seule fois** : dépôt GitHub → *Settings* → *Pages*
 - Bathymétrie : [Natural Earth](https://www.naturalearthdata.com) (domaine public).
 - Données des sujets générés : Wikidata (CC0).
 - Textes et images : Wikipédia (CC BY-SA).
-- Fonds : © OpenStreetMap contributors, © CARTO ; imagerie © Esri.
+- Fond de carte : [OpenFreeMap](https://openfreemap.org) (gratuit, sans clé), © OpenMapTiles, données © contributeurs OpenStreetMap ; imagerie satellite © Esri.
 
 ## Feuille de route
 

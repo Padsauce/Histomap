@@ -392,7 +392,7 @@ Le format actuel de `data/scenarios.js` sera migré vers ce modèle (outil de co
 - **F-86 (S)** Fiche élève imprimable ou en PDF (carte + chronologie + questions).
 - **F-87 (L)** Partage de sujets entre professeurs (nécessite des comptes et un serveur — à décider).
 
-Contraintes : les fonds de carte publics (OpenStreetMap, CARTO) **interdisent le téléchargement en
+Contraintes : les fonds de carte publics (OpenStreetMap, OpenFreeMap…) **déconseillent ou interdisent le téléchargement en
 masse** de leurs tuiles. Le hors ligne suppose donc un fond de carte que l'on héberge soi-même
 (PMTiles généré depuis OpenStreetMap), dont on extrait la zone utile. Les images Wikimedia sont
 réutilisables à condition de conserver l'auteur et la licence dans le paquet.
