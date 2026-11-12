@@ -177,15 +177,30 @@ export class Morpher {
   }
 
   /** Données sérialisables (préparation dans un Web Worker, puis utilisation sur le fil principal). */
+  /**
+   * Données compactes : seuls les États dont le tracé change sont enregistrés ; les autres sont
+   * reconstitués à partir de l'état de départ (fromData(d, A)).
+   */
   toData(): MorphData {
     return {
-      ents: [...this.ents.values()].map(e => ({ key: e.key, propsA: e.propsA, propsB: e.propsB, keep: e.keep, changed: e.changed })),
+      v: MORPH_VERSION,
+      ents: [...this.ents.values()].filter(e => e.changed).map(e => ({ key: e.key, propsA: e.propsA, propsB: e.propsB, keep: e.keep, changed: true })),
       patches: this.patches, fadeOut: [...this.fadeOut], fadeIn: [...this.fadeIn], buildMs: this.buildMs
     };
   }
-  static fromData(d: MorphData): Morpher {
+  static fromData(d: MorphData, A: FC): Morpher {
     const m = Object.create(Morpher.prototype) as Morpher;
-    m.ents = new Map(d.ents.map(e => [e.key, { ...e, a: [], b: [], lost: [], gained: [], bbB: [0, 0, 0, 0] as BBox, bbLost: [0, 0, 0, 0] as BBox }]));
+    const blank = { a: [] as MP, b: [] as MP, lost: [] as MP, gained: [] as MP, bbB: [0, 0, 0, 0] as BBox, bbLost: [0, 0, 0, 0] as BBox };
+    m.ents = new Map();
+    for (const f of A.features) {
+      const p = f.properties || {};
+      const k = keyOf(p);
+      const cur = m.ents.get(k);
+      const mp = toMP(f.geometry);
+      if (cur) cur.keep = cur.keep.concat(mp);
+      else m.ents.set(k, { key: k, propsA: p, propsB: p, keep: mp, changed: false, ...blank });
+    }
+    for (const e of d.ents) m.ents.set(e.key, { ...e, ...blank });
     m.patches = d.patches;
     m.fadeOut = new Map(d.fadeOut);
     m.fadeIn = new Map(d.fadeIn);
@@ -231,7 +246,11 @@ export class Morpher {
   }
 }
 
+/** Version de l'algorithme : les transitions enregistrées d'une autre version sont recalculées. */
+export const MORPH_VERSION = 2;
+
 export interface MorphData {
+  v: number;
   ents: { key: string; propsA?: Props; propsB?: Props; keep: MP; changed: boolean }[];
   patches: Patch[];
   fadeOut: [string, MP][];

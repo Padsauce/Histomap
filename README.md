@@ -16,7 +16,9 @@ s'adapte au sujet, de 100 000 ans à l'heure.
   alliances en pointillé). Avant 6000 av. J.-C., la carte montre les terres émergées par la baisse des mers.
 - **Frontières dynamiques** : entre deux états connus, seuls les territoires qui changent de mains
   bougent — un front avance à travers chacun d'eux, le reste des frontières reste fixe, sans vide ni
-  chevauchement entre voisins (interpolation signalée comme telle ; désactivable).
+  chevauchement entre voisins (interpolation signalée comme telle ; désactivable). Les transitions
+  sont préparées en arrière-plan à l'ouverture d'un sujet, enregistrées dans le navigateur et peuvent
+  être incluses dans un sujet téléchargé.
 - **Mode professeur** (bouton 🎒 Préparer) : ajoutez événements, États et vues à un sujet de cours,
   ordonnez-les, annotez-les, posez des notes sur la carte, lancez une **visite guidée** en plein écran,
   imprimez une **fiche élève** ou **téléchargez le sujet** (`.histomap`) pour l'ouvrir sans connexion.
@@ -87,6 +89,7 @@ npm run build:borders  # télécharge Cliopatria et prépare le mode précis (pu
 | `src/ui/timeline.ts` | Frise zoomable (canvas) |
 | `src/ui/teacher.ts` | Mode Préparation, paquets hors ligne, visite guidée, fiche élève |
 | `src/core/morph.ts`, `src/core/morph.worker.ts` | Frontières dynamiques (transferts de territoire, calcul en arrière-plan) |
+| `src/core/morphstore.ts` | File de calcul, enregistrement local (IndexedDB), préparation en continu, export des transitions |
 | `public/sw.js`, `public/manifest.webmanifest` | Application installable et hors ligne |
 | `src/i18n/` | Textes d'interface (français, anglais) |
 | `src/data/` | Sujets éditorialisés, catégories, noms d'États par époque |

@@ -264,3 +264,6 @@ body.touring .layout { grid-template-columns: 1fr 370px; }
 body.touring .panel.left { display: none; }
 body.touring .filters { display: none; }
 @media (max-width: 1000px) { .tour { bottom: 160px; } body.touring .layout { grid-template-columns: 1fr; } }
+.morph-progress { display: grid; gap: .2rem; margin: .1rem 0 .3rem 1.6rem; }
+.morph-progress .bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.morph-progress .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }

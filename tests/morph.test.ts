@@ -63,7 +63,9 @@ describe("frontières dynamiques par transfert de territoire", () => {
   });
 
   it("se prépare hors du fil principal sans perte (sérialisation)", () => {
-    const copy = Morpher.fromData(JSON.parse(JSON.stringify(m.toData())));
+    const data = m.toData();
+    expect(data.ents.map(e => e.key).sort()).toEqual(["n:X", "n:Y"]); // Z, inchangé, n'est pas enregistré
+    const copy = Morpher.fromData(JSON.parse(JSON.stringify(data)), A);
     expect(JSON.stringify(copy.at(0.4))).toEqual(JSON.stringify(m.at(0.4)));
   });
 });

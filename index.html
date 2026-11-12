@@ -59,6 +59,10 @@
           <label class="toggle"><input type="checkbox" id="opt-globe" checked> <span data-i18n="display.globe"></span></label>
           <label class="toggle"><input type="checkbox" id="opt-cvd"> <span data-i18n="display.cvd"></span></label>
           <label class="toggle"><input type="checkbox" id="opt-dynamic" checked> <span data-i18n="display.dynamic"></span></label>
+          <div id="morph-progress" class="morph-progress" hidden role="status">
+            <div class="bar"><span id="morph-progress-bar"></span></div>
+            <span id="morph-progress-text" class="muted small"></span>
+          </div>
           <label class="field"><span data-i18n="display.borders"></span>
             <select id="opt-borders">
               <option value="fast" data-i18n="display.borders.fast"></option>
@@ -93,6 +97,7 @@
         <p id="prep-count" class="muted small"></p>
         <ol id="prep-items" class="prep-items"></ol>
         <ul id="prep-notes" class="prep-notes"></ul>
+        <label class="toggle small"><input type="checkbox" id="prep-morphs" checked> <span data-i18n="prep.includeMorphs"></span></label>
         <div class="actions prep-actions">
           <button id="btn-tour" class="primary" data-i18n="prep.tour"></button>
           <button id="btn-download" data-i18n="prep.download"></button>

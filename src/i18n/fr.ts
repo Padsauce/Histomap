@@ -238,6 +238,11 @@ const dict: Record<string, string | string[]> = {
   "sheet.sources": "Sources : Wikidata (CC0), Wikipédia (CC BY-SA), frontières historical-basemaps / Cliopatria. Fiche générée par Histomap.",
   "prep.textsMissing": "{n} texte(s) Wikipédia n'ont pas pu être inclus (réseau) : ils resteront consultables en ligne.",
   "map.transitionFade": "fondu (cartes trop différentes pour une transition détaillée)",
+  "morph.progress": "Transitions préparées en arrière-plan : {done} / {total}…",
+  "morph.ready": "✓ {done} / {total} transitions prêtes, enregistrées dans ce navigateur.",
+  "morph.failed": "{n} trop lourde(s) : fondu enchaîné.",
+  "prep.includeMorphs": "Inclure les transitions des frontières (fichier plus lourd, aucun calcul à l'ouverture)",
+  "prep.buildingMorphs": "Transitions des frontières : {n} / {total}…",
   "chrono.empty": "Aucun événement pour les catégories sélectionnées.",
   "chrono.count": "{n} événement(s)"
 };

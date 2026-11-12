@@ -605,6 +605,16 @@ visualisation, les frontières réelles changent souvent d'un coup. Désactivabl
 Tests : sommets immobiles hors de la zone transférée, États non concernés inchangés, surface totale
 conservée et aucun chevauchement à chaque instant.
 
+Enregistrement et calcul en continu (demande du 12/11/2026) : chaque transition calculée est
+enregistrée dans le navigateur (IndexedDB, données compactes : seuls les États qui changent), sous une
+clé fondée sur le contenu des deux états de carte — la même en ligne et depuis un paquet. À l'ouverture
+d'un sujet, toutes les transitions de la période visible (élargie) sont préparées une à une en
+arrière-plan, avec une barre d'avancement ; une transition nécessaire tout de suite passe devant.
+Mesures (guerre de Cent Ans, mode précis) : 18 transitions en 17 s, interface réactive (changement de
+date ≤ 4 ms pendant le calcul) ; après rechargement, tout est retrouvé en 2 s sans recalcul. Les paquets
+`.histomap` peuvent inclure les transitions (calculées sur les frontières exactes du paquet) : à
+l'ouverture, aucun calcul n'est nécessaire.
+
 Limites : le fond de carte n'est pas inclus dans les paquets (conditions d'usage des fournisseurs de
 tuiles) — hors ligne, la carte montre les États sur fond uni ; les articles Wikipédia complets ne sont
 pas inclus (seulement les résumés) ; les paquets ouverts ne sont gardés que pendant la session.

@@ -11,6 +11,8 @@ import * as Time from "../core/time";
 import * as Wiki from "../core/wiki";
 import * as Net from "../core/net";
 import * as Borders from "../core/borders";
+import { morphService, morphKey } from "../core/morphstore";
+import type { MorphData } from "../core/morph";
 import type { EventSpec, Scenario, ScenarioSpec, CategoryId, Precision } from "../core/types";
 
 type Pt = [number, number];
@@ -44,6 +46,8 @@ export interface HistomapPackage {
   notes: MapNote[];
   texts: Record<string, { title: string; extract: string; image?: string; url?: string }>;
   borders: { mode: Borders.BordersMode; hb: { year: number; fc: FC }[]; clio?: { from: number; to: number; fc: FC } };
+  /** Transitions des frontières dynamiques, calculées sur les frontières du paquet (facultatif). */
+  morphs?: Record<string, MorphData>;
 }
 
 export interface TeacherContext {
@@ -264,7 +268,21 @@ export class Teacher {
       status.textContent = this.ctx.t("prep.buildingTexts", { n: ++done, total: titles.length });
     }
     status.textContent = this.ctx.t("prep.buildingBorders");
-    const borders = await collectBorders(cur.bordersMode, Time.parse(sc.range[0]).t, Time.endOf(sc.range[1]), bbox);
+    const t0 = Time.parse(sc.range[0]).t, t1 = Time.endOf(sc.range[1]);
+    const borders = await collectBorders(cur.bordersMode, t0, t1, bbox);
+    // Transitions des frontières dynamiques, calculées sur les frontières exactes du paquet
+    let morphs: Record<string, MorphData> | undefined;
+    if ($<HTMLInputElement>("prep-morphs").checked) {
+      const pairs = await Borders.framePairs(t0, t1, borders.mode, 300, borders);
+      const keys: string[] = [];
+      let n = 0;
+      for (const p of pairs) {
+        const key = morphKey(p.A, p.B);
+        status.textContent = this.ctx.t("prep.buildingMorphs", { n: ++n, total: pairs.length });
+        if (await morphService.has(key) || await morphService.compute(key, p.A.fc, p.B.fc, { timeout: 120000, background: false })) keys.push(key);
+      }
+      morphs = await morphService.export(keys);
+    }
     const scenario: ScenarioSpec = {
       ...sc,
       id: "pkg:" + slug(this.basket.title || sc.title),
@@ -277,7 +295,7 @@ export class Teacher {
     const pkg: HistomapPackage = {
       format: "histomap-package", version: 1, created: new Date().toISOString(),
       title: scenario.title, lang: this.ctx.lang(), scenario,
-      tour: items.map(i => this.stepOf(i)), notes: this.basket.notes, texts, borders
+      tour: items.map(i => this.stepOf(i)), notes: this.basket.notes, texts, borders, morphs
     };
     const blob = await gzip(JSON.stringify(pkg));
     const a = document.createElement("a");
@@ -296,6 +314,7 @@ export class Teacher {
       const pkg = JSON.parse(text) as HistomapPackage;
       if (pkg.format !== "histomap-package") throw new Error(this.ctx.t("prep.badFile"));
       Borders.installPackage(pkg.borders);
+      if (pkg.morphs) await morphService.import(pkg.morphs); // transitions prêtes, sans recalcul
       if (pkg.borders.clio) this.ctx.setBordersMode("precise");
       for (const [title, x] of Object.entries(pkg.texts || {})) {
         // Les résumés sont servis depuis le paquet, sans réseau

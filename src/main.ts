@@ -12,7 +12,8 @@ import { generate, fetchFacts } from "./core/generator";
 import { Timeline, type TimelineEvent, type TimelineLane } from "./ui/timeline";
 import * as World from "./core/worldindex";
 import * as Borders from "./core/borders";
-import { Morpher, CrossFade, type MorphData } from "./core/morph";
+import { Morpher, CrossFade } from "./core/morph";
+import { morphService, morphKey } from "./core/morphstore";
 import { Teacher, worldToEvent } from "./ui/teacher";
 import { CATEGORIES } from "./data/categories";
 import { SCENARIOS as CURATED } from "./data/scenarios";
@@ -586,7 +587,7 @@ function bordersBadge(f: Borders.BordersFrame): string {
 function frameStale(t: number): boolean {
   if (!state.frame) return true;
   if (state.bordersMode === "precise") return Time.histYear(t) !== state.frame.year;
-  return Borders.fastKey(t) !== state.frame.key;
+  return Borders.fastYear(t) !== state.frame.year;
 }
 
 async function refreshStates(force = false): Promise<void> {
@@ -631,57 +632,65 @@ async function refreshStates(force = false): Promise<void> {
 }
 /** Prépare l'interpolation entre le cadre courant et l'état connu suivant (une fois par couple). */
 /*
- * Préparation des transferts de territoire dans un Web Worker (l'interface reste fluide), avec un
- * délai maximal : au-delà (cartes très détaillées et très différentes), repli sur un fondu enchaîné.
+ * Transitions : d'abord la mémoire ou l'enregistrement local ; sinon calcul immédiat (prioritaire sur
+ * la préparation de fond) avec un délai de 8 s, au-delà duquel un fondu enchaîné s'affiche pendant
+ * que le calcul complet se poursuit en arrière-plan.
  */
-const MORPH_TIMEOUT = 8000;
-let morphWorker: Worker | null = null, morphJob: { id: number; key: string } | null = null, morphSeq = 0;
-const morphCache = new Map<string, Morpher | CrossFade>();
-const morphFallback = new Set<string>();
-function buildMorph(key: string, A: FC, B: FC): Promise<Morpher | null> {
-  if (morphJob && morphWorker) { morphWorker.terminate(); morphWorker = null; } // une seule préparation à la fois
-  if (!morphWorker) {
-    try { morphWorker = new Worker(new URL("./core/morph.worker.ts", import.meta.url), { type: "module" }); }
-    catch { return Promise.resolve(new Morpher(A, B)); } // navigateur sans workers modules : calcul direct
-  }
-  const id = ++morphSeq, w = morphWorker;
-  morphJob = { id, key };
-  return new Promise(resolve => {
-    const timer = window.setTimeout(() => { if (morphJob?.id === id) { w.terminate(); morphWorker = null; morphJob = null; } resolve(null); }, MORPH_TIMEOUT);
-    w.onmessage = (e: MessageEvent<{ id: number; data?: MorphData; error?: string }>) => {
-      if (e.data.id !== id) return;
-      clearTimeout(timer);
-      morphJob = null;
-      resolve(e.data.data ? Morpher.fromData(e.data.data) : null);
-    };
-    w.onerror = () => { clearTimeout(timer); morphJob = null; resolve(null); };
-    w.postMessage({ id, A, B });
-  });
-}
 let morphPending = "";
 async function ensureMorph(frame: Borders.BordersFrame): Promise<void> {
   if (state.morph && state.morph.key.startsWith(frame.key + "→")) return;
   const pair = await Borders.nextFrame(frame, state.bordersMode).catch(() => null);
   if (!pair || pair.next.key === frame.key) { state.morph = null; return; }
-  const key = frame.key + "→" + pair.next.key;
+  const key = morphKey(frame, pair.next);
   const install = (m: Morpher | CrossFade) => {
     if (state.frame?.key !== frame.key || !state.dynamic) return;
-    state.morph = { key, m, tA: pair.tA, tB: pair.tB, nextYear: pair.next.year, fallback: m instanceof CrossFade };
+    state.morph = { key: frame.key + "→" + pair.next.key, m, tA: pair.tA, tB: pair.tB, nextYear: pair.next.year, fallback: m instanceof CrossFade };
     state.morphF = -1;
     applyMorph(true);
   };
-  const cached = morphCache.get(key);
-  if (cached) { install(cached); return; }
+  const known = await morphService.load(key, frame.fc);
+  if (known) { install(known); return; }
   if (morphPending === key) return;
   morphPending = key;
-  const m = await buildMorph(key, frame.fc, pair.next.fc);
+  const m = await morphService.compute(key, frame.fc, pair.next.fc, { timeout: 8000, background: false });
   if (morphPending === key) morphPending = "";
-  const res: Morpher | CrossFade = m || new CrossFade(frame.fc, pair.next.fc);
-  if (!m) morphFallback.add(key);
-  morphCache.set(key, res);
-  if (morphCache.size > 8) morphCache.delete(morphCache.keys().next().value!);
-  install(res);
+  if (m) { install(m); return; }
+  install(new CrossFade(frame.fc, pair.next.fc));
+  morphService.compute(key, frame.fc, pair.next.fc, { timeout: 180000, background: true }).then(full => { if (full) install(full); });
 }
+
+/**
+ * Préparation en continu des transitions du sujet (période visible élargie), en arrière-plan.
+ * Relancée quand le sujet, le mode de frontières ou la période visible changent.
+ */
+let planTimer = 0, planSig = "";
+function schedulePlan(delay = 1500): void {
+  clearTimeout(planTimer);
+  planTimer = window.setTimeout(planMorphs, delay);
+}
+async function planMorphs(): Promise<void> {
+  if (!state.dynamic) { planSig = ""; morphService.cancelPlan(); return; }
+  const [b0, b1] = state.sc.bounds;
+  const span = state.view[1] - state.view[0];
+  const r0 = Math.max(b0, state.view[0] - span * 0.25), r1 = Math.min(b1, state.view[1] + span * 0.25);
+  const sig = `${state.sc.id}|${state.bordersMode}|${r0.toFixed(1)}|${r1.toFixed(1)}`;
+  if (sig === planSig) return;
+  planSig = sig;
+  const pairs = await Borders.framePairs(r0, r1, state.bordersMode, 150).catch(() => []);
+  if (sig !== planSig) return;
+  morphService.startPlan(pairs, p => morphKey(p.A, p.B));
+}
+morphService.onProgress = p => {
+  const el = $("morph-progress");
+  if (!p.total) { el.hidden = true; return; }
+  el.hidden = false;
+  const pct = Math.round((100 * (p.done + p.failed)) / p.total);
+  $("morph-progress-bar").style.width = pct + "%";
+  $("morph-progress-text").textContent = p.active
+    ? t_("morph.progress", { done: p.done, total: p.total })
+    : t_("morph.ready", { done: p.done, total: p.total }) + (p.failed ? " " + t_("morph.failed", { n: p.failed }) : "");
+};
+
 let morphTimer = 0, morphLast = 0;
 /** Applique l'interpolation pour la date courante (limitée à ≈ 12 rafraîchissements par seconde). */
 function applyMorph(force = false): void {
@@ -789,7 +798,7 @@ function updatePaleo(): void {
 // ---------------------------------------------------------------------------
 const timeline = new Timeline($("timeline"), {
   onChange: t => { stopPlay(); setTime(t, { fromTimeline: true }); },
-  onView: v => { state.view = v; updateDateLabel(); refreshEvents(); scheduleLanes(); writeHash(); },
+  onView: v => { state.view = v; updateDateLabel(); refreshEvents(); scheduleLanes(); schedulePlan(2500); writeHash(); },
   onSelectEvent: e => focusEvent(e.idx),
   onSelectLaneItem: (_lane, e) => { const it = state.laneItems[e.idx]; if (it) inspectWorld(it, true); }
 });
@@ -972,6 +981,7 @@ function setScenario(id: string, { t, view, fly = true }: { t?: number; view?: [
   }
   setTime(t ?? state.sc.startT);
   teacher?.onScenario(state.sc);
+  schedulePlan();
 }
 
 /** Ajoute (ou remplace) un sujet généré et le mémorise localement. */
@@ -1652,6 +1662,7 @@ $<HTMLInputElement>("opt-dynamic").onchange = e => {
   store.set("dynamicBorders", state.dynamic);
   state.morph = null;
   refreshStates(true);
+  schedulePlan(200);
 };
 $<HTMLSelectElement>("opt-borders").value = state.bordersMode;
 $<HTMLSelectElement>("opt-borders").onchange = e => {
@@ -1661,6 +1672,7 @@ $<HTMLSelectElement>("opt-borders").onchange = e => {
   state.morph = null;
   state.actorNames.clear();
   refreshStates(true);
+  schedulePlan(200);
   writeHash();
 };
 $<HTMLSelectElement>("opt-basemap").onchange = e => {

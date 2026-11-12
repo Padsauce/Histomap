@@ -38,15 +38,28 @@ export const snapshotFor = (t: number) => { let s = SNAPSHOTS[0]; for (const x o
 const EMPTY: FC = { type: "FeatureCollection", features: [] };
 const hbCache = new Map<number, FC>();
 
+/** Empreinte courte (FNV-1a 32 bits) : identifie un état de carte par son contenu. */
+export function hash(str: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+const ptsCount = (g: GeoJSON.Geometry | null) => (!g ? 0 : g.type === "Polygon" ? g.coordinates.reduce((s, r) => s + r.length, 0)
+  : g.type === "MultiPolygon" ? g.coordinates.reduce((s, p) => s + p.reduce((t, r) => t + r.length, 0), 0) : 0);
+
+/** Cadre d'un instantané : clé fondée sur l'année et le contenu (un extrait de paquet a sa propre clé). */
+function hbFrameOf(year: number, fc: FC): BordersFrame {
+  return { key: `hb:${year}:${fc.features.length}`, source: "hb", year, fc, composites: EMPTY };
+}
 async function fastFrame(t: number): Promise<BordersFrame> {
   const snap = snapshotFor(t);
   let fc = hbCache.get(snap.year);
   if (!fc) { fc = await getJSON<FC>(BASEMAPS_URL(snap.year), { persist: true }); hbCache.set(snap.year, fc); }
-  return { key: "hb:" + snap.year, source: "hb", year: snap.year, fc, composites: EMPTY };
+  return hbFrameOf(snap.year, fc);
 }
 
-/** Clé du cadre rapide pour une date (sans chargement) : permet de savoir si le cadre change. */
-export const fastKey = (t: number) => "hb:" + snapshotFor(t).year;
+/** Année de l'instantané utilisé pour une date (sans chargement) : permet de savoir si le cadre change. */
+export const fastYear = (t: number) => snapshotFor(t).year;
 
 // ---------------- Mode précis : Cliopatria ----------------
 interface ClioManifest { source: string; built: string; buckets: { from: number; to: number; file: string; count: number }[] }
@@ -88,36 +101,42 @@ export async function clioRecords(fromY: number, toY: number): Promise<FC | null
   return { type: "FeatureCollection", features };
 }
 
-async function clioFrame(Y: number): Promise<BordersFrame | null> {
-  if (clioFrames.has(Y)) return clioFrames.get(Y)!;
-  let fc: FC | undefined, fileKey: string;
-  if (pkgClio && Y >= pkgClio.from && Y <= pkgClio.to) { fc = pkgClio.fc; fileKey = "pkg"; }
-  else {
-    const m = await clioManifest();
-    const b = m?.buckets.find(x => Y >= x.from && Y <= x.to);
-    if (!b) return null;
-    fileKey = b.file;
-    fc = clioBuckets.get(b.file);
-    if (!fc) { fc = await getJSON<FC>(clioBase() + b.file, { persist: true }); clioBuckets.set(b.file, fc); }
-  }
-  const b = { file: fileKey };
+/**
+ * Cadre Cliopatria pour l'année Y à partir d'un ensemble de tracés (tranche du serveur ou paquet).
+ * La clé est une empreinte des tracés valables (nom, période, nombre de points) : le même état de
+ * carte a la même clé quelle que soit sa provenance.
+ */
+export function buildClioFrame(fc: FC, Y: number): BordersFrame {
   const fills: GeoJSON.Feature[] = [], comps: GeoJSON.Feature[] = [];
   const ids: string[] = [];
-  fc.features.forEach((f, i) => {
+  for (const f of fc.features) {
     const p = f.properties!;
-    if (p.FROM > Y || p.TO < Y) return;
-    ids.push(String(i));
+    if (p.FROM > Y || p.TO < Y) continue;
+    ids.push(`${p.NAME}|${p.FROM}|${p.TO}|${ptsCount(f.geometry)}`);
     // Normalisation vers le schéma commun : le membre d'un ensemble « (X) » dépend de X
     const member = String(p.MEMBEROF || "").split(";")[0];
     const props = { ...p, SUBJECTO: member.startsWith("(") ? member.slice(1, -1) : "", PARTOF: member, BORDERPRECISION: 2 };
     (p.COMPOSITE ? comps : fills).push({ type: "Feature", geometry: f.geometry, properties: props });
-  });
-  // Deux années consécutives avec les mêmes tracés partagent le même cadre (même clé)
-  const key = "clio:" + b.file + ":" + ids.join(",");
-  const same = [...clioFrames.values()].find(fr => fr.key === key);
-  const frame: BordersFrame = same ? { ...same, year: Y } :
-    { key, source: "clio", year: Y, fc: { type: "FeatureCollection", features: fills }, composites: { type: "FeatureCollection", features: comps } };
-  if (same) frame.key = same.key;
+  }
+  ids.sort();
+  return { key: `clio:${hash(ids.join("\n"))}:${ids.length}`, source: "clio", year: Y, fc: { type: "FeatureCollection", features: fills }, composites: { type: "FeatureCollection", features: comps } };
+}
+
+async function clioFrame(Y: number): Promise<BordersFrame | null> {
+  if (clioFrames.has(Y)) return clioFrames.get(Y)!;
+  let fc: FC | undefined;
+  if (pkgClio && Y >= pkgClio.from && Y <= pkgClio.to) fc = pkgClio.fc;
+  else {
+    const m = await clioManifest();
+    const b = m?.buckets.find(x => Y >= x.from && Y <= x.to);
+    if (!b) return null;
+    fc = clioBuckets.get(b.file);
+    if (!fc) { fc = await getJSON<FC>(clioBase() + b.file, { persist: true }); clioBuckets.set(b.file, fc); }
+  }
+  let frame = buildClioFrame(fc, Y);
+  // Deux années consécutives avec les mêmes tracés partagent le même cadre (mêmes objets)
+  const same = [...clioFrames.values()].find(fr => fr.key === frame.key);
+  if (same) frame = { ...same, year: Y };
   clioFrames.set(Y, frame);
   if (clioFrames.size > 400) clioFrames.delete(clioFrames.keys().next().value!);
   return frame;
@@ -164,6 +183,15 @@ export async function nextFrame(frame: BordersFrame, mode: BordersMode): Promise
     return { next, tA: SNAPSHOTS[i].t, tB: nx.t };
   }
   if (mode !== "precise") return null;
+  const span = clioSpan(frame);
+  if (!span) return null;
+  const next = await clioFrame(span.nextY);
+  if (!next) return null;
+  return { next, tA: fromHistYear(span.start), tB: fromHistYear(span.nextY) };
+}
+
+/** Période de validité d'un cadre Cliopatria : du dernier changement au suivant. */
+function clioSpan(frame: BordersFrame): { start: number; nextY: number } | null {
   let start = -Infinity, change = Infinity;
   for (const f of [...frame.fc.features, ...frame.composites.features]) {
     const p = f.properties!;
@@ -172,7 +200,43 @@ export async function nextFrame(frame: BordersFrame, mode: BordersMode): Promise
   }
   const nextY = change + 1;
   if (!Number.isFinite(nextY) || nextY > CLIO_RANGE[1]) return null;
-  const next = await clioFrame(nextY);
-  if (!next) return null;
-  return { next, tA: fromHistYear(Math.max(start, CLIO_RANGE[0])), tB: fromHistYear(nextY) };
+  return { start: Math.max(start, CLIO_RANGE[0]), nextY };
+}
+
+export interface FramePair { A: BordersFrame; B: BordersFrame; tA: number; tB: number }
+
+/**
+ * Transitions successives couvrant [t0, t1] (pour les préparer d'avance), au plus `max`.
+ * Sans argument `pkg`, utilise les frontières courantes (réseau, cache, paquet installé) ;
+ * avec `pkg`, uniquement les frontières d'un paquet (même découpage qu'à son ouverture).
+ */
+export async function framePairs(t0: number, t1: number, mode: BordersMode, max = 200,
+  pkg?: { hb: { year: number; fc: FC }[]; clio?: { from: number; to: number; fc: FC } }): Promise<FramePair[]> {
+  const out: FramePair[] = [];
+  if (pkg) {
+    if (mode === "precise" && pkg.clio) {
+      let fr = buildClioFrame(pkg.clio.fc, Math.max(histYear(t0), pkg.clio.from));
+      while (out.length < max) {
+        const sp = clioSpan(fr);
+        if (!sp || sp.nextY > pkg.clio.to || fromHistYear(sp.start) > t1) break;
+        const nx = buildClioFrame(pkg.clio.fc, sp.nextY);
+        if (nx.key !== fr.key) out.push({ A: fr, B: nx, tA: fromHistYear(sp.start), tB: fromHistYear(sp.nextY) });
+        fr = nx;
+      }
+      return out;
+    }
+    const hb = [...pkg.hb].sort((a, b) => a.year - b.year);
+    for (let i = 0; i + 1 < hb.length && out.length < max; i++) {
+      out.push({ A: hbFrameOf(hb[i].year, hb[i].fc), B: hbFrameOf(hb[i + 1].year, hb[i + 1].fc), tA: fromHistYear(hb[i].year), tB: fromHistYear(hb[i + 1].year) });
+    }
+    return out;
+  }
+  let fr: BordersFrame | null = await frameFor(t0, mode);
+  while (fr && out.length < max) {
+    const p: { next: BordersFrame; tA: number; tB: number } | null = await nextFrame(fr, mode).catch(() => null);
+    if (!p || p.tA > t1) break;
+    if (p.next.key !== fr.key) out.push({ A: fr, B: p.next, tA: p.tA, tB: p.tB });
+    fr = p.next;
+  }
+  return out;
 }
